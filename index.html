@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Unaadecre — A CRUZ NÃO NEGOCIA COM O PECADO</title>
+<title>Elegance Wear — A Nova Era do Estilo</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👕</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -18,7 +18,6 @@
 </head>
 <body>
 
-<!-- POPUP FLUTUANTE INICIAL -->
 <div class="scroll-popup" id="scrollPopup">
   <span>Deslize para ver os modelos</span>
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -26,14 +25,11 @@
   </svg>
 </div>
 
-<!-- HEADER MINIMALISTA -->
 <header class="header">
-  <div class="logo">UNAADECRE<span>·</span>2026</div>
+  <div class="logo">ELEGANCE<span>·</span>WEAR</div>
 </header>
 
-<!-- CONTAINER DE SCROLL -->
 <div class="scroll-container">
-
   <div class="canvas-wrapper">
     <div id="webgl-container"></div>
     <div class="canvas-overlay"></div>
@@ -42,7 +38,7 @@
   <section class="scroll-section" id="s1">
     <div class="content-box text-center fade-in">
       <span class="eyebrow">COLEÇÃO 2026</span>
-      <h1 id="heroTitle">UNAADECRE<br>2026</h1>
+      <h1 id="heroTitle">ELEGANCE<br>WEAR</h1>
     </div>
   </section>
 
@@ -89,15 +85,16 @@
   <section class="scroll-section" id="s7">
     <div class="content-box align-left fade-in">
       <span class="eyebrow">FIM DA COLEÇÃO</span>
-      <h2>UNAADECRE - 2026</h2>
+      <h2>Elegance Wear</h2>
       <p>Obrigado por explorar nossa coleção.</p>
     </div>
   </section>
-
 </div>
 
-<button class="lock-btn" id="lockBtn" title="Painel Admin">🔒</button>
+<!-- BOTÃO DO CADEADO -->
+<button class="lock-btn" id="lockBtn" title="Painel Admin" aria-label="Painel Admin">🔒</button>
 
+<!-- MODAL DE LOGIN -->
 <div class="modal" id="loginModal">
   <div class="modal-card">
     <h3>Painel Administrativo</h3>
@@ -111,6 +108,7 @@
   </div>
 </div>
 
+<!-- PAINEL ADMINISTRATIVO -->
 <div class="admin-panel" id="adminPanel">
   <div class="admin-header">
     <h2>🎛️ Painel Administrativo</h2>
@@ -123,5 +121,6 @@
 </div>
 
 <script type="module" src="script.js"></script>
+<!-- NÃO CARREGUE MAIS O ADMIN.JS AQUI -->
 </body>
 </html>
