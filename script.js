@@ -299,7 +299,7 @@ async function createViewer(el, cam, options = {}) {
 }
 window.__createViewer = createViewer;
 
-// ============ HERO VIEWER (SLIDER LATERAL COM ZOOM MÁXIMO) ============
+// ============ HERO VIEWER (SLIDER LATERAL COM ZOOM GIGANTE) ============
 async function initHeroViewer() {
   const el = document.getElementById('heroViewer');
   if (!el || state.camisetas.length === 0) return;
@@ -310,8 +310,8 @@ async function initHeroViewer() {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
   
-  // ZOOM AUMENTADO 2X: Câmera super próxima (Z = 1.2) e focada no peito (Y = 1.6)
-  camera.position.set(0, 1.6, 1.2); 
+  // ZOOM EXTREMO: Câmera super perto (Z = 0.7) e alta (Y = 2.0)
+  camera.position.set(0, 2.0, 0.7); 
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
@@ -328,8 +328,9 @@ async function initHeroViewer() {
 
   const wrappers = [];
   const totalModels = Math.min(3, state.camisetas.length);
-  // Aumentando o espaçamento para eles não se sobreporem com o zoom alto
-  const spacing = 2.8; 
+  
+  // ESPAÇAMENTO AUMENTADO: Para os 3 caberem na tela com o zoom gigante
+  const spacing = 4.0; 
 
   for (let i = 0; i < totalModels; i++) {
     const { wrapper } = await buildMannequin(state.camisetas[i]);
@@ -391,9 +392,10 @@ async function initHeroViewer() {
       }
     }
 
+    // Posição final da câmera
     camera.position.x = currentCameraX;
-    camera.position.y = 1.6; // Foco na altura do peito
-    camera.lookAt(currentCameraX, 1.4, 0); 
+    camera.position.y = 2.0; // Altura da câmera
+    camera.lookAt(currentCameraX, 1.8, 0); // Foco no peito, jogando o boneco pra cima da tela
     
     wrappers.forEach((w, i) => {
       if (i === currentIndex) {
