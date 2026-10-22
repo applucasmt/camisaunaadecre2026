@@ -58,7 +58,7 @@ function renderAdminSidebar() {
   const sidebar = document.getElementById('adminSidebar');
   const tabs = [
     { id:'config', label:'⚙️ Textos do Site' },
-    { id:'camisetas', label:'👕 Modelos' },
+    { id:'camisetas', label:'👕 Modelos (3D)' },
     { id:'texturas', label:'🎨 Texturas' }
   ];
   sidebar.innerHTML = '';
@@ -156,7 +156,7 @@ function editCamisetaTexturas(id) {
           <label>Textura Principal (PNG/JPG)</label>
           <div class="upload-zone" data-upload="principal">
             <input type="file" accept="image/*" data-file="principal">
-            <p>📤 Clique para enviar</p>
+            <p>📤 Clique para enviar a nova estampa</p>
             <p class="upload-status" data-status="principal" style="color:var(--secondary);font-size:.8rem;margin-top:8px;"></p>
           </div>
         </div>
