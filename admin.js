@@ -58,7 +58,7 @@ function renderAdminSidebar() {
   const sidebar = document.getElementById('adminSidebar');
   const tabs = [
     { id:'config', label:'⚙️ Textos do Site' },
-    { id:'camisetas', label:'👕 Modelos (3D)' },
+    { id:'camisetas', label:'👕 Modelos' },
     { id:'texturas', label:'🎨 Texturas' }
   ];
   sidebar.innerHTML = '';
@@ -85,7 +85,6 @@ function openAdminTab(tabId) {
   if (tabId === 'texturas') renderTexturasTab(content);
 }
 
-// ============ CONFIG ============
 function renderConfigTab(container) {
   const c = window.__state.config;
   container.innerHTML = `
@@ -109,7 +108,6 @@ function renderConfigTab(container) {
   };
 }
 
-// ============ MODELOS ============
 function renderCamisetasTab(container) {
   const list = window.__state.camisetas;
   container.innerHTML = `
@@ -130,7 +128,6 @@ function renderCamisetasTab(container) {
   });
 }
 
-// ============ TEXTURAS ============
 function renderTexturasTab(container) {
   container.innerHTML = `
     <h2 style="margin-bottom:24px;">🎨 Texturas por Modelo</h2>
@@ -197,7 +194,6 @@ function setupUpload(cam) {
     reader.onload = async (ev) => {
       const dataUrl = ev.target.result;
       
-      // Preview local imediato
       if (ADMIN.previewViewer) {
         const tex = new THREE.TextureLoader().load(dataUrl);
         tex.colorSpace = THREE.SRGBColorSpace;
@@ -216,7 +212,6 @@ function setupUpload(cam) {
           status.textContent = '✓ Salva na planilha!';
           window.__toast('Textura salva!');
           
-          // Atualiza a página principal ao vivo
           if (window.__state.productViewers[cam.id]) {
             const tex = new THREE.TextureLoader().load(r.url);
             tex.colorSpace = THREE.SRGBColorSpace;
