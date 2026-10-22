@@ -3,21 +3,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 
-// ==========================================
-// CARREGA O GSAP PARA O SCROLLTELLING
-// ==========================================
-const gsapScript = document.createElement('script');
-gsapScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js';
-gsapScript.onload = () => {
-  const stScript = document.createElement('script');
-  stScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js';
-  stScript.onload = () => initApp();
-  document.head.appendChild(stScript);
-};
-document.head.appendChild(gsapScript);
-
 const API_URL = 'https://script.google.com/macros/s/AKfycbyMiP-nbR9_UYZGCA7dtAWIm4HIl2Vg4UeatogPC9f7ORdEZMSEJwU6LggDenh0eqDVug/exec';
-const state = { config: {}, camisetas: [], productViewers: {} };
+const state = { config: {}, camisetas: [], viewers: [] };
 window.__state = state;
 window.THREE = THREE;
 
@@ -80,7 +67,6 @@ function loadAvatarModel() {
   return gltfPromise;
 }
 
-// ============ MANIPULAÇÃO DE TEXTURA ============
 function applyTshirtTexture(root, textures, configs) {
   root.traverse(child => {
     if (!child.isMesh) return;
@@ -175,14 +161,16 @@ async function buildMannequin(cam) {
   return { wrapper, model, textures, configs, mannequinColors };
 }
 
-// ============ CRIA VIEWER ISOLADO (PARA O ADMIN) ============
+// ============ CRIAR VISUALIZADOR 3D ISOLADO ============
 async function createViewer(el, cam, options = {}) {
   const w = el.clientWidth || 400;
   const h = el.clientHeight || 400;
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 1000);
-  camera.position.set(0, 1.65, 2.5);
+  
+  // CÂMERA ISOLADA: Enquadramento perfeito (da cintura pra cima)
+  camera.position.set(0, 1.8, 3.2);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
@@ -202,7 +190,7 @@ async function createViewer(el, cam, options = {}) {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-    controls.target.set(0, 1.55, 0); 
+    controls.target.set(0, 1.5, 0); 
     controls.enablePan = false;
     controls.autoRotate = options.autoRotate !== false;
     controls.autoRotateSpeed = 1.5;
@@ -279,9 +267,7 @@ async function createViewer(el, cam, options = {}) {
         if (isEditing) controls.autoRotate = false;
       },
       setAutoRotate(v) { controls.autoRotate = v; },
-      zoomIn() { controls.dollyIn(1.2); controls.update(); },
-      zoomOut() { controls.dollyOut(1.2); controls.update(); },
-      resetCamera() { camera.position.set(0, 1.65, 2.5); controls.target.set(0, 1.55, 0); controls.update(); },
+      resetCamera() { camera.position.set(0, 1.8, 3.2); controls.target.set(0, 1.5, 0); controls.update(); },
       destroy() { cancelAnimationFrame(animId); ro.disconnect(); controls.dispose(); renderer.dispose(); el.innerHTML = ''; }
     };
   } catch (error) {
@@ -292,18 +278,14 @@ async function createViewer(el, cam, options = {}) {
 window.__createViewer = createViewer;
 
 // ==========================================
-// INICIALIZAÇÃO (SCROLLTELLING PRINCIPAL)
+// INICIALIZAÇÃO
 // ==========================================
 async function initApp() {
-  gsap.registerPlugin(ScrollTrigger);
-  
-  // 1. Carrega API
   const data = await apiGet('getAll');
   if (data.ok) {
     state.config = Object.fromEntries(data.config.map(c => [c.CHAVE, c.VALOR]));
     state.camisetas = data.camisetas;
     
-    // Atualiza textos da seção
     if(state.camisetas[0]) {
       document.getElementById('nome-1').textContent = state.camisetas[0].nome;
       document.getElementById('desc-1').textContent = state.camisetas[0].descricao;
@@ -324,126 +306,21 @@ async function initApp() {
     ];
   }
 
-  // 2. Configura Three.js Base
-  const container = document.getElementById('webgl-container');
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-  
-  // Câmera inicial (visão ampla, de longe)
-  camera.position.set(0, 1.8, 6.5); 
-
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  container.appendChild(renderer.domElement);
-
-  // Luzes
-  scene.add(new THREE.AmbientLight(0xffffff, 1.5));
-  const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(2, 5, 4); scene.add(key);
-  const fill = new THREE.DirectionalLight(0xffffff, 1.0); fill.position.set(-4, 3, 2); scene.add(fill);
-  const rim = new THREE.DirectionalLight(0xd4af37, 1.5); rim.position.set(0, 2, -5); scene.add(rim);
-
-  // OrbitControls (Permite o usuário interagir com o mouse na área do canvas)
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.08;
-  controls.target.set(0, 1.4, 0);
-  controls.enablePan = false;
-  controls.minDistance = 1.5;
-  controls.maxDistance = 8.0;
-  controls.enabled = false; // Bloqueado na tela inicial
-
-  // 3. Posiciona os 3 manequins
-  const group = new THREE.Group();
-  scene.add(group);
-  
-  const totalModels = Math.min(3, state.camisetas.length);
-  const spacing = 2.8; 
-
-  for (let i = 0; i < totalModels; i++) {
-    const { wrapper } = await buildMannequin(state.camisetas[i]);
-    wrapper.position.x = (i - 1) * spacing; 
-    wrapper.position.y = -0.3;
-    group.add(wrapper);
+  // CRIA OS 3 AMBIENTES (UM PARA CADA SEÇÃO)
+  if (state.camisetas[0]) {
+    const el1 = document.getElementById('canvas-1');
+    state.viewers[0] = await createViewer(el1, state.camisetas[0], { autoRotate: true });
+  }
+  if (state.camisetas[1]) {
+    const el2 = document.getElementById('canvas-2');
+    state.viewers[1] = await createViewer(el2, state.camisetas[1], { autoRotate: true });
+  }
+  if (state.camisetas[2]) {
+    const el3 = document.getElementById('canvas-3');
+    state.viewers[2] = await createViewer(el3, state.camisetas[2], { autoRotate: true });
   }
 
-  // 4. Animação de loop
-  function animate() {
-    requestAnimationFrame(animate);
-    const t = performance.now() * 0.001;
-    
-    // Gira todos levemente
-    group.children.forEach(child => {
-      child.rotation.y = t * 0.3;
-    });
-
-    controls.update();
-    renderer.render(scene, camera);
-  }
-  animate();
-
-  // ==========================================
-  // 5. SCROLLTELLING (A MÁGICA)
-  // ==========================================
-  gsap.utils.toArray('.content-box').forEach(box => {
-    ScrollTrigger.create({
-      trigger: box,
-      start: "top 85%",
-      onEnter: () => box.classList.add('visible'),
-      onLeaveBack: () => box.classList.remove('visible')
-    });
-  });
-
-  // Timeline de movimento da câmera
-  const tl = gsap.timeline({
-    scrollTrigger: {
-      trigger: ".scroll-container",
-      start: "top top",
-      end: "bottom bottom",
-      scrub: 1, // Deixa o movimento suave e preso ao scroll
-      onUpdate: (self) => {
-        // Libera o mouse (rotação/zoom) APENAS quando o usuário entra nas seções de modelo
-        const progress = self.progress;
-        if (progress > 0.15 && progress < 0.85) {
-           controls.enabled = true;
-        } else {
-           controls.enabled = false;
-        }
-      }
-    }
-  });
-
-  // Seção 1 (Intro) -> Seção 2 (Foco no Manequim 1 - Centro)
-  tl.to(camera.position, {
-    x: 0, y: 1.6, z: 2.8, // Aproxima
-    scrollTrigger: { trigger: "#section-2", start: "top bottom", end: "top top", scrub: 1 },
-    onStart: () => { controls.target.set(0, 1.4, 0); } // Foca no centro
-  });
-
-  // Seção 2 -> Seção 3 (Foco no Manequim 2 - Direita)
-  tl.to(camera.position, {
-    x: 2.8, y: 1.6, z: 2.8, // Voa para a direita
-    scrollTrigger: { trigger: "#section-3", start: "top bottom", end: "top top", scrub: 1 },
-    onStart: () => { controls.target.set(2.8, 1.4, 0); }
-  });
-
-  // Seção 3 -> Seção 4 (Foco no Manequim 3 - Esquerda)
-  tl.to(camera.position, {
-    x: -2.8, y: 1.6, z: 2.8, // Voa para a esquerda
-    scrollTrigger: { trigger: "#section-4", start: "top bottom", end: "top top", scrub: 1 },
-    onStart: () => { controls.target.set(-2.8, 1.4, 0); }
-  });
-
-  // Resize
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    ScrollTrigger.refresh();
-  });
-
-  // 6. Inicia Painel Admin
+  // Inicia o Painel Admin
   initAdmin();
 }
 
@@ -538,7 +415,6 @@ function initAdmin() {
     const c = window.__state.camisetas.find(x => String(x.id) === String(id));
     const content = document.getElementById('adminContent');
     
-    // Código HTML de Edição (Resumido para caber)
     content.innerHTML = `
       <h2 style="margin-bottom:16px;">Texturas: ${c.nome}</h2>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
@@ -571,3 +447,5 @@ function initAdmin() {
     if (ADMIN.previewViewer) { ADMIN.previewViewer.destroy(); ADMIN.previewViewer = null; }
   }
 }
+
+initApp();
