@@ -21,64 +21,66 @@
 <!-- HEADER FIXO -->
 <header class="header" id="header">
   <div class="container header-inner">
-    <a href="#" class="logo" id="siteLogo">ELEGANCE<span>·</span>WEAR</a>
-    <nav class="nav" id="mainNav">
-      <a href="#section-1">Apresentação</a>
-      <a href="#section-2">Detalhes</a>
-      <a href="#section-3">Coleção</a>
+    <a href="#" class="logo">ELEGANCE<span>·</span>WEAR</a>
+    <nav class="nav">
+      <a href="#section-1">Início</a>
+      <a href="#section-2">Modelo 1</a>
+      <a href="#section-3">Modelo 2</a>
+      <a href="#section-4">Modelo 3</a>
     </nav>
   </div>
 </header>
 
-<!-- SCROLL EXPERIENCE -->
+<!-- CANVAS 3D FIXO AO FUNDO -->
+<div id="webgl-container"></div>
+
+<!-- SEÇÕES DE SCROLL -->
 <div class="scroll-container">
   
-  <!-- CANVAS 3D FIXO NO FUNDO -->
-  <div class="canvas-wrapper">
-    <div id="webgl-container"></div>
-    <div class="canvas-overlay"></div>
-  </div>
-
   <!-- SEÇÃO 1: INTRODUÇÃO -->
   <section class="scroll-section" id="section-1">
-    <div class="content-box">
+    <div class="content-box text-center">
       <span class="badge">COLEÇÃO 2026</span>
       <h1 id="heroTitle">ELEGANCE WEAR</h1>
-      <p id="heroSub">A nova definição de estilo. Gire, aproxime e sinta cada detalhe do algodão premium.</p>
-      <div class="scroll-hint">Role para explorar ⌄</div>
+      <p id="heroSub">A nova definição de estilo. Role para explorar cada modelo em 3D.</p>
+      <div class="scroll-hint">Role para baixo ⌄</div>
     </div>
   </section>
 
-  <!-- SEÇÃO 2: FRENTE E COSTAS -->
+  <!-- SEÇÃO 2: FOCO NO MODELO 1 -->
   <section class="scroll-section" id="section-2">
-    <div class="content-box align-right">
-      <h2>Design em 360º</h2>
-      <p>Visualize a modelagem oversized e a estampa exclusiva por todos os ângulos, com precisão milimétrica.</p>
-    </div>
-  </section>
-
-  <!-- SEÇÃO 3: DETALHE DO TECIDO -->
-  <section class="scroll-section" id="section-3">
     <div class="content-box align-left">
-      <h2>Toque e Caimento</h2>
-      <p>Algodão penteado 30.1. Uma experiência de conforto que você sente à primeira vista.</p>
+      <span class="eyebrow">MODELO 01</span>
+      <h2 id="nome-1">Classic Black</h2>
+      <p id="desc-1">Algodão premium penteado 30.1. Design minimalista que combina com tudo.</p>
     </div>
   </section>
 
-  <!-- SEÇÃO 4: COMPRAR -->
+  <!-- SEÇÃO 3: FOCO NO MODELO 2 -->
+  <section class="scroll-section" id="section-3">
+    <div class="content-box align-right">
+      <span class="eyebrow">MODELO 02</span>
+      <h2 id="nome-2">Urban White</h2>
+      <p id="desc-2">Modelagem oversized com toque suave. Peça-chave do guarda-roupa.</p>
+    </div>
+  </section>
+
+  <!-- SEÇÃO 4: FOCO NO MODELO 3 -->
   <section class="scroll-section" id="section-4">
-    <div class="content-box text-center">
-      <h2>Pronto para elevar seu estilo?</h2>
-      <p>Explore a coleção completa em nosso site.</p>
-      <a href="#" class="btn-primary" id="cta-btn">Ver Coleção Completa</a>
+    <div class="content-box align-left">
+      <span class="eyebrow">MODELO 03</span>
+      <h2 id="nome-3">Gold Edition</h2>
+      <p id="desc-3">Edição limitada com acabamento exclusivo. Detalhes em dourado.</p>
+      <button class="btn-primary" onclick="document.getElementById('lockBtn').click()">Editar Modelos</button>
     </div>
   </section>
 
 </div>
 
-<!-- ADMIN PANEL -->
-<button class="lock-btn" id="lockBtn" title="Painel Admin" aria-label="Painel Admin">🔒</button>
+<!-- BOTÃO ADMIN -->
+<button class="lock-btn" id="lockBtn" title="Painel Admin">🔒</button>
 
+<!-- MODAL E PAINEL ADMIN -->
 <div class="modal" id="loginModal">
   <div class="modal-card">
     <h3>Painel Administrativo</h3>
@@ -104,6 +106,5 @@
 </div>
 
 <script type="module" src="script.js"></script>
-<script type="module" src="admin.js"></script>
 </body>
 </html>
