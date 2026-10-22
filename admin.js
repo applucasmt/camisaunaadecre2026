@@ -88,20 +88,24 @@ function editCamisetaTexturas(id) {
   const c = window.__state.camisetas.find(x => String(x.id) === String(id));
   const content = document.getElementById('adminContent');
   
-  // Layout com abas para as 4 partes
   content.innerHTML = `
     <h2 style="margin-bottom:16px;">Texturas: ${c.nome}</h2>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
       <div class="admin-form">
         
-        <div style="display:flex; gap:5px; margin-bottom:20px; flex-wrap:wrap;">
+        <!-- CONTROLE DE MODO -->
+        <div style="display:flex; gap:10px; margin-bottom:20px; padding:15px; background:rgba(255,255,255,0.05); border-radius:8px; border:1px solid var(--border);">
+          <button class="btn-ghost mode-btn" id="modeRotate" style="flex:1;">🔄 Rotacionar Modelo</button>
+          <button class="btn-ghost mode-btn active" id="modeEdit" style="flex:1; border-color:var(--secondary); color:var(--secondary);">✏️ Ajustar Estampa</button>
+        </div>
+
+        <div style="display:flex; gap:5px; margin-bottom:20px; flex-wrap:wrap;" id="part-buttons">
           <button class="btn-ghost part-btn active" data-part="frente">Frente</button>
           <button class="btn-ghost part-btn" data-part="costas">Costas</button>
           <button class="btn-ghost part-btn" data-part="manga">Mangas</button>
           <button class="btn-ghost part-btn" data-part="gola">Gola</button>
         </div>
 
-        <!-- Inputs de Imagem -->
         <div id="part-inputs">
           ${['frente', 'costas', 'manga', 'gola'].map(part => `
             <div class="upload-zone" data-upload="${part}" style="display:${part==='frente'?'block':'none'};">
@@ -112,10 +116,10 @@ function editCamisetaTexturas(id) {
           `).join('')}
         </div>
 
-        <div style="margin-top:20px; padding:15px; border:1px dashed var(--border); border-radius:8px; text-align:center;">
-          <p style="font-size:0.85rem; color:var(--text-dim);">Interação 3D Ativa</p>
+        <div id="edit-instructions" style="margin-top:20px; padding:15px; border:1px dashed var(--secondary); border-radius:8px; text-align:center;">
+          <p style="font-size:0.85rem; color:var(--text-dim);">Modo Ajuste Ativo</p>
           <strong style="color:var(--secondary); font-size:1.1rem;" id="editLabel">Ajustando: Frente</strong><br>
-          <span style="font-size:0.8rem;">Arraste o mouse no manequim para mover a estampa.<br>Role o scroll para aumentar/diminuir.</span>
+          <span style="font-size:0.8rem;">Arraste com o <b>Botão Esquerdo</b> para mover.<br>Role o <b>Scroll</b> para aumentar/diminuir.<br><br><i>*Para rotacionar, clique em "Rotacionar Modelo" ou use o <b>Botão Direito</b> do mouse.</i></span>
         </div>
 
         <button class="btn-primary" id="saveTexSettings" style="margin-top:20px;">Salvar Todos os Ajustes</button>
@@ -126,40 +130,54 @@ function editCamisetaTexturas(id) {
 
   document.getElementById('backTexBtn').onclick = () => { destroyPreview(); openAdminTab('camisetas'); };
 
-  // Controle de Abas
   let currentPart = 'frente';
+  let isEditMode = true;
+
+  // Lógica de troca de modo (Rotação x Ajuste)
+  const btnRotate = document.getElementById('modeRotate');
+  const btnEdit = document.getElementById('modeEdit');
+  const instructions = document.getElementById('edit-instructions');
+
+  const setMode = (edit) => {
+    isEditMode = edit;
+    btnRotate.classList.toggle('active', !edit);
+    btnEdit.classList.toggle('active', edit);
+    instructions.style.opacity = edit ? '1' : '0.3';
+    
+    if (ADMIN.previewViewer) {
+      if (!edit) {
+        ADMIN.previewViewer.setEditingMode(null); // Desativa edição (libera rotação)
+      } else {
+        ADMIN.previewViewer.setEditingMode(currentPart); // Ativa edição
+      }
+    }
+  };
+
+  btnRotate.onclick = () => setMode(false);
+  btnEdit.onclick = () => setMode(true);
+
+  // Controle de Abas de partes da camisa
   const partBtns = document.querySelectorAll('.part-btn');
-  
   partBtns.forEach(btn => {
     btn.onclick = () => {
       partBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentPart = btn.dataset.part;
       
-      // Mostra apenas o input da aba atual
       document.querySelectorAll('.upload-zone').forEach(z => z.style.display = 'none');
       document.querySelector(`[data-upload="${currentPart}"]`).style.display = 'block';
-      
       document.getElementById('editLabel').textContent = `Ajustando: ${currentPart.charAt(0).toUpperCase() + currentPart.slice(1)}`;
       
-      // Ativa modo de edição no Three.js
-      if (ADMIN.previewViewer) {
+      if (ADMIN.previewViewer && isEditMode) {
         ADMIN.previewViewer.setEditingMode(currentPart);
       }
     };
   });
 
-  // Callback chamado quando o Three.js move a textura via mouse
-  window.__adminOnTextureChange = (part, cfg) => {
-    // Atualiza interface se necessário (opcional)
-  };
-
-  // Configurar Inputs de Upload
   ['frente', 'costas', 'manga', 'gola'].forEach(part => {
     setupUpload(c, part, () => {});
   });
 
-  // Salvar no Banco
   document.getElementById('saveTexSettings').onclick = async () => {
     if (!ADMIN.previewViewer) return;
     const cfg = ADMIN.previewViewer.configs;
@@ -173,9 +191,7 @@ function editCamisetaTexturas(id) {
     if(r.ok) { Object.assign(c, dados); window.__toast('Ajustes de textura salvos!'); }
   };
 
-  // Iniciar Preview 3D
   initAdminPreview(c).then(() => {
-    // Carrega as texturas iniciais no Preview
     Promise.all([
       window.__loadTexture(c.textura_principal, c.cor_base),
       window.__loadTexture(c.textura_costas, c.cor_base),
@@ -183,7 +199,7 @@ function editCamisetaTexturas(id) {
       window.__loadTexture(c.textura_gola, c.cor_base)
     ]).then(([f, cB, m, g]) => {
       ADMIN.previewViewer.setTextures(f, cB, m, g, ADMIN.previewViewer.configs);
-      ADMIN.previewViewer.setEditingMode('frente'); // Inicia editando a frente
+      setMode(true); // Inicia no modo edição por padrão
     });
   });
 }
@@ -203,14 +219,12 @@ function setupUpload(cam, tipo, cb) {
       const tex = new THREE.TextureLoader().load(dataUrl);
       tex.colorSpace = THREE.SRGBColorSpace; tex.flipY = false;
       
-      // Atualiza preview imediatamente
       if (ADMIN.previewViewer) {
         const currentTextures = ADMIN.previewViewer.textures;
         currentTextures[tipo] = tex;
         ADMIN.previewViewer.setTextures(currentTextures.frente, currentTextures.costas, currentTextures.manga, currentTextures.gola, ADMIN.previewViewer.configs);
       }
 
-      // Envia para API
       const base64 = dataUrl.split(',')[1];
       const r = await window.__apiPost({
         action:'uploadImagem', senha:getSenha(), camiseta_id: cam.id, tipo, base64,
