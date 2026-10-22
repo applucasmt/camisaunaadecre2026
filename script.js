@@ -251,17 +251,20 @@ async function createAdminViewer(el, cam) {
     const { wrapper, spinner, model, textures, configs, mannequinColors } = await buildMannequin(cam);
     scene.add(wrapper);
 
-    // CONTROLES: Botão DIREITO gira o modelo, botão ESQUERDO é desativado para dar lugar ao arrastar da textura
+    // CONTROLES: Botão DIREITO gira o modelo, Scroll é desativado para dar lugar ao zoom da textura
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.1;
     controls.target.set(0, 1.2, 0); 
     controls.enablePan = false;
-    controls.autoRotate = false; // Desligado, pois o usuário controla manualmente
+    controls.enableZoom = false; // DESATIVADO para usar o scroll na textura
+    controls.autoRotate = false;
+    
+    // Configura o mouse: Esquerdo arrasta textura, Direito rotaciona câmera
     controls.mouseButtons = {
-      LEFT: null, // Desativado para edição da textura
-      MIDDLE: THREE.MOUSE.DOLLY,
-      RIGHT: THREE.MOUSE.ROTATE // Botão direito rotaciona o personagem
+      LEFT: null, 
+      MIDDLE: null,
+      RIGHT: THREE.MOUSE.ROTATE
     };
 
     // Configuração do Raycaster para editar a textura
@@ -270,7 +273,7 @@ async function createAdminViewer(el, cam) {
     let isDraggingTexture = false;
     let previousMousePosition = { x: 0, y: 0 };
     
-    // Precisamos encontrar a malha da frente da camisa para edição
+    // Encontra a malha da frente da camisa
     let shirtMesh = null;
     model.traverse(child => {
       if (child.isMesh && child.name.toLowerCase().includes('body_front')) {
@@ -280,9 +283,9 @@ async function createAdminViewer(el, cam) {
 
     const domElement = renderer.domElement;
     
+    // Evento de clique para arrastar
     domElement.addEventListener('mousedown', (e) => {
       if (e.button === 0) { // Botão Esquerdo
-        // Verifica se o mouse clicou na camisa
         const rect = domElement.getBoundingClientRect();
         mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
         mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -304,7 +307,7 @@ async function createAdminViewer(el, cam) {
         const deltaX = (e.clientX - previousMousePosition.x) / w;
         const deltaY = (e.clientY - previousMousePosition.y) / h;
         
-        // Inverte X pois o offset da textura é oposto ao movimento
+        // Inverte X e Y para o movimento ficar natural
         configs.frente.x -= deltaX * 1.5; 
         configs.frente.y += deltaY * 1.5;
         
@@ -318,28 +321,26 @@ async function createAdminViewer(el, cam) {
       domElement.style.cursor = 'default';
     });
 
+    // Evento de scroll para Zoom na textura
     domElement.addEventListener('wheel', (e) => {
-      if (e.button === 0 && textures.frente) {
-        // Precisamos verificar se o mouse está sobre a camisa
-        const rect = domElement.getBoundingClientRect();
-        mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-        mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-        
-        raycaster.setFromCamera(mouse, camera);
-        if (shirtMesh) {
-          const intersects = raycaster.intersectObject(shirtMesh, true);
-          if (intersects.length > 0) {
-            e.preventDefault(); // Impede rolagem da página
-            const zoomFactor = 0.05;
-            if (e.deltaY < 0) {
-              configs.frente.scale += zoomFactor; // Zoom in
-            } else {
-              configs.frente.scale -= zoomFactor; // Zoom out
-            }
-            configs.frente.scale = Math.max(0.1, Math.min(5, configs.frente.scale)); // Limites
-            
-            textures.frente.repeat.set(0.6 * configs.frente.scale, 0.6 * configs.frente.scale);
+      const rect = domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      
+      raycaster.setFromCamera(mouse, camera);
+      if (shirtMesh) {
+        const intersects = raycaster.intersectObject(shirtMesh, true);
+        if (intersects.length > 0) {
+          e.preventDefault(); // Impede a rolagem da página
+          const zoomFactor = 0.05;
+          if (e.deltaY < 0) {
+            configs.frente.scale += zoomFactor; // Zoom in
+          } else {
+            configs.frente.scale -= zoomFactor; // Zoom out
           }
+          configs.frente.scale = Math.max(0.1, Math.min(5, configs.frente.scale)); // Limites
+          
+          textures.frente.repeat.set(0.6 * configs.frente.scale, 0.6 * configs.frente.scale);
         }
       }
     });
@@ -401,7 +402,7 @@ async function createAdminViewer(el, cam) {
     return null;
   }
 }
-window.__createViewer = createAdminViewer; // Substitui a função original para o painel
+window.__createViewer = createAdminViewer; // Substitui a função original
 
 // ==========================================
 // CORE: CÂMERA CINEMATOGRÁFICA E SCROLL
@@ -656,7 +657,7 @@ function initAdmin() {
         <div style="flex:1; font-size:0.9rem; line-height:1.4;">
           <strong style="color:var(--accent);">Controles Interativos:</strong><br>
           <b>Botão Esquerdo (Arrastar):</b> Move a textura.<br>
-          <b>Scroll do Mouse:</b> Aumenta/Diminui o zoom da textura.<br>
+          <b>Scroll do Mouse (na camisa):</b> Aumenta/Diminui o zoom da textura.<br>
           <b>Botão Direito (Arrastar):</b> Gira o manequim.
         </div>
       </div>
@@ -668,9 +669,6 @@ function initAdmin() {
             <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Textura Frente</h3>
             <div><label>URL da Imagem</label><input type="text" id="urlFrente" value="${c.textura_principal || ''}" placeholder="https://..."></div>
             <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileFrente"></div>
-            <div style="margin-top:12px; font-size:0.85rem; color:var(--text-dim);">
-              Offset Atual: X (${c.x_frente || 0}) | Y (${c.y_frente || 0}) | Escala (${c.scale_frente || 1})
-            </div>
           </div>
 
           <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
@@ -757,7 +755,7 @@ function initAdmin() {
         });
       };
 
-      // Salvar (Pega os valores atuais do THREE.js após a edição por mouse)
+      // Salvar
       document.getElementById('saveCamisetaBtn').onclick = async () => {
         const cfg = ADMIN.previewViewer.getConfigs().frente;
         
