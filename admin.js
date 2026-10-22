@@ -123,7 +123,6 @@ function editCamisetaTexturas(id) {
   
   document.getElementById('backTexBtn').onclick = () => { destroyPreview(); openAdminTab('camisetas'); };
   
-  // Atualiza Preview ao vivo
   const updatePreview = () => {
     if (!ADMIN.previewViewer) return;
     const scale = parseFloat(document.getElementById('texScale').value);
