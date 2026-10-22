@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-const ADMIN = { logado: false, abaAtiva: 'config', previewViewer: null, currentPart: null };
+const ADMIN = { logado: false, abaAtiva: 'config', previewViewer: null };
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('lockBtn')?.addEventListener('click', () => {
@@ -93,243 +93,182 @@ function editCamisetaTexturas(id) {
   const c = window.__state.camisetas.find(x => String(x.id) === String(id));
   const content = document.getElementById('adminContent');
   
+  // Pega os valores atuais (mesmo se estiverem vazios)
+  const cBase = c.cor_base || '#ffffff';
+  const cCorpo = c.cor_corpo || '#e0e0e0';
+  const cCabelo = c.cor_cabelo || '#333333';
+  const cCalca = c.cor_calca || '#1a1a1a';
+  const cSapato = c.cor_sapato || '#ffffff';
+
   content.innerHTML = `
     <h2 style="margin-bottom:16px;">Ajustes: ${c.nome}</h2>
+    
+    <div style="background: #1a1a1a; border: 1px solid var(--accent); padding: 16px; border-radius: 12px; margin-bottom: 24px; display:flex; gap:20px; align-items:center;">
+      <div style="font-size: 24px;">🖱️</div>
+      <div style="flex:1; font-size:0.9rem; line-height:1.4;">
+        <strong style="color:var(--accent);">Controles Interativos:</strong><br>
+        <b>Botão Esquerdo (Arrastar):</b> Move a textura da parte clicada.<br>
+        <b>Scroll do Mouse (na peça):</b> Aumenta/Diminui o zoom.<br>
+        <b>Botão Direito (Arrastar):</b> Gira o manequim.
+      </div>
+    </div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
+      
       <div class="admin-form">
         
-        <div style="display:flex; gap:10px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:10px;">
-          <button class="btn-ghost tab-main active" id="tabEstampas" style="flex:1;">🎨 Estampas</button>
-          <button class="btn-ghost tab-main" id="tabCores" style="flex:1;">👤 Cores do Manequim</button>
+        <!-- TEXTURA FRENTE -->
+        <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+          <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Textura Frente</h3>
+          <div><label>URL da Imagem (ou Base64)</label><input type="text" id="urlFrente" value="${c.textura_principal || ''}" placeholder="https://..."></div>
+          <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileFrente" accept="image/*"></div>
         </div>
 
-        <div id="contentEstampas">
-          <div style="display:flex; gap:10px; margin-bottom:20px; padding:15px; background:rgba(255,255,255,0.05); border-radius:8px;">
-            <button class="btn-ghost mode-btn" id="modeRotate" style="flex:1;">🔄 Girar</button>
-            <button class="btn-ghost mode-btn active" id="modeEdit" style="flex:1; border-color:var(--secondary); color:var(--secondary);">✏️ Mover Estampa</button>
-          </div>
-
-          <div style="display:flex; gap:5px; margin-bottom:20px; flex-wrap:wrap;" id="part-buttons">
-            <button class="btn-ghost part-btn active" data-part="frente">Frente</button>
-            <button class="btn-ghost part-btn" data-part="costas">Costas</button>
-            <button class="btn-ghost part-btn" data-part="manga">Mangas</button>
-            <button class="btn-ghost part-btn" data-part="gola">Gola</button>
-          </div>
-
-          <div id="part-inputs">
-            ${['frente', 'costas', 'manga', 'gola'].map(part => `
-              <div class="upload-zone" data-upload="${part}" style="display:${part==='frente'?'block':'none'};">
-                <input type="file" accept="image/*" data-file="${part}">
-                <p>📤 Upload de Imagem (${part})</p>
-                <p class="upload-status" data-status="${part}" style="color:var(--secondary);font-size:.8rem;"></p>
-              </div>
-            `).join('')}
-          </div>
-
-          <div id="edit-instructions" style="margin-top:20px; padding:15px; border:1px dashed var(--secondary); border-radius:8px; text-align:center; background:rgba(212,175,55,0.05);">
-            <p style="font-size:0.85rem; color:var(--text-dim); margin-bottom:8px;">Modo Ajuste Ativo</p>
-            <strong style="color:var(--secondary); font-size:1.1rem;" id="editLabel">Ajustando: Frente</strong><br>
-            <span style="font-size:0.8rem; display:block; margin-top:8px; line-height:1.4;">
-              <b>Arraste</b> com o botão esquerdo para mover.<br>
-              Role o <b>Scroll</b> para aumentar/diminuir.
-            </span>
-          </div>
-
-          <button class="btn-primary" id="saveTexSettings" style="margin-top:20px;">Salvar Ajustes de Estampa</button>
+        <!-- TEXTURA COSTAS -->
+        <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+          <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Textura Costas</h3>
+          <div><label>URL da Imagem (ou Base64)</label><input type="text" id="urlCostas" value="${c.textura_costas || ''}" placeholder="https://..."></div>
+          <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileCostas" accept="image/*"></div>
         </div>
 
-        <div id="contentCores" style="display:none;">
-          <p style="color:var(--text-dim); font-size:.9rem; margin-bottom:20px;">Altere a cor do corpo, cabelo e calça do manequim.</p>
-          
-          <div style="display:flex; flex-direction:column; gap:15px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-alt); padding:15px; border-radius:8px;">
-              <label>Cor do Corpo</label>
-              <input type="color" id="colorCorpo" value="${c.cor_corpo || '#e0e0e0'}" style="width:50px; height:40px; border:none; border-radius:5px; cursor:pointer;">
-            </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-alt); padding:15px; border-radius:8px;">
-              <label>Cor do Cabelo</label>
-              <input type="color" id="colorCabelo" value="${c.cor_cabelo || '#333333'}" style="width:50px; height:40px; border:none; border-radius:5px; cursor:pointer;">
-            </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-alt); padding:15px; border-radius:8px;">
-              <label>Cor da Calça</label>
-              <input type="color" id="colorCalca" value="${c.cor_calca || '#ffffff'}" style="width:50px; height:40px; border:none; border-radius:5px; cursor:pointer;">
-            </div>
-          </div>
-
-          <button class="btn-primary" id="saveColorSettings" style="margin-top:20px;">Salvar Cores</button>
+        <!-- TEXTURA MANGA -->
+        <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+          <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Textura Mangas</h3>
+          <div><label>URL da Imagem (ou Base64)</label><input type="text" id="urlManga" value="${c.textura_manga || ''}" placeholder="https://..."></div>
+          <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileManga" accept="image/*"></div>
         </div>
 
-        <button class="btn-ghost" id="backTexBtn" style="margin-top:20px;">← Voltar</button>
+        <!-- TEXTURA GOLA -->
+        <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+          <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Textura Gola</h3>
+          <div><label>URL da Imagem (ou Base64)</label><input type="text" id="urlGola" value="${c.textura_gola || ''}" placeholder="https://..."></div>
+          <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileGola" accept="image/*"></div>
+        </div>
+
+        <!-- CORES DO MANEQUIM -->
+        <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+          <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Cores do Manequim</h3>
+          <div style="display:flex; gap:8px; margin-bottom:8px;">
+            <div style="flex:1"><label>Corpo</label><input type="color" id="corCorpo" value="${cCorpo}" style="height:40px; padding:4px; cursor:pointer;"></div>
+            <div style="flex:1"><label>Cabelo</label><input type="color" id="corCabelo" value="${cCabelo}" style="height:40px; padding:4px; cursor:pointer;"></div>
+            <div style="flex:1"><label>Calça</label><input type="color" id="corCalca" value="${cCalca}" style="height:40px; padding:4px; cursor:pointer;"></div>
+            <div style="flex:1"><label>Sapato</label><input type="color" id="corSapato" value="${cSapato}" style="height:40px; padding:4px; cursor:pointer;"></div>
+          </div>
+          <div><label>Cor Base (Fundo se não tiver textura)</label><input type="color" id="corBase" value="${cBase}" style="height:40px; padding:4px; cursor:pointer; width:100%"></div>
+        </div>
+
+        <button class="btn-primary" id="saveCamisetaBtn" style="margin-top:10px;">Salvar Alterações</button>
+        <button class="btn-ghost" id="backTexBtn">← Voltar</button>
       </div>
-      <div><div class="preview-3d" id="adminPreview"></div></div>
-    </div>`;
 
-  document.getElementById('backTexBtn').onclick = () => { destroyPreview(); openAdminTab('camisetas'); };
+      <div>
+        <div class="preview-3d" id="adminPreview" style="height: 100%; min-height: 500px; background: #000; border-radius:12px; overflow:hidden;"></div>
+      </div>
+    </div>
+  `;
 
-  const tabEstampas = document.getElementById('tabEstampas');
-  const tabCores = document.getElementById('tabCores');
-  const contentEstampas = document.getElementById('contentEstampas');
-  const contentCores = document.getElementById('contentCores');
-
-  tabEstampas.onclick = () => {
-    tabEstampas.classList.add('active'); tabCores.classList.remove('active');
-    contentEstampas.style.display = 'block'; contentCores.style.display = 'none';
-  };
-  tabCores.onclick = () => {
-    tabCores.classList.add('active'); tabEstampas.classList.remove('active');
-    contentCores.style.display = 'block'; contentEstampas.style.display = 'none';
-  };
-
-  const updateColors = () => {
-    if (!ADMIN.previewViewer) return;
-    ADMIN.previewViewer.setMannequinColors({
-      corpo: document.getElementById('colorCorpo').value,
-      cabelo: document.getElementById('colorCabelo').value,
-      calca: document.getElementById('colorCalca').value
-    });
-  };
-  document.getElementById('colorCorpo').oninput = updateColors;
-  document.getElementById('colorCabelo').oninput = updateColors;
-  document.getElementById('colorCalca').oninput = updateColors;
-
-  document.getElementById('saveColorSettings').onclick = async () => {
-    const dados = {
-      cor_corpo: document.getElementById('colorCorpo').value,
-      cor_cabelo: document.getElementById('colorCabelo').value,
-      cor_calca: document.getElementById('colorCalca').value
-    };
-    const r = await window.__apiPost({ action:'updateCamiseta', senha:getSenha(), id: c.id, dados });
-    if(r.ok) { 
-      Object.assign(c, dados); 
-      window.__toast('Cores salvas com sucesso!', false); 
-    } else {
-      window.__toast('Erro ao salvar as cores na planilha.', true);
-    }
-  };
-
-  let currentPart = 'frente';
-  let isEditMode = true;
-
-  const btnRotate = document.getElementById('modeRotate');
-  const btnEdit = document.getElementById('modeEdit');
-  const instructions = document.getElementById('edit-instructions');
-
-  const setMode = (edit) => {
-    isEditMode = edit;
-    btnRotate.classList.toggle('active', !edit);
-    btnEdit.classList.toggle('active', edit);
-    instructions.style.opacity = edit ? '1' : '0.3';
-    instructions.style.display = edit ? 'block' : 'none';
-    
-    if (ADMIN.previewViewer) {
-      if (!edit) ADMIN.previewViewer.setEditingMode(null); 
-      else ADMIN.previewViewer.setEditingMode(currentPart); 
-    }
-  };
-
-  btnRotate.onclick = () => setMode(false);
-  btnEdit.onclick = () => setMode(true);
-
-  const partBtns = document.querySelectorAll('.part-btn');
-  partBtns.forEach(btn => {
-    btn.onclick = () => {
-      partBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentPart = btn.dataset.part;
-      
-      document.querySelectorAll('.upload-zone').forEach(z => z.style.display = 'none');
-      document.querySelector(`[data-upload="${currentPart}"]`).style.display = 'block';
-      document.getElementById('editLabel').textContent = `Ajustando: ${currentPart.charAt(0).toUpperCase() + currentPart.slice(1)}`;
-      
-      if (ADMIN.previewViewer && isEditMode) {
-        ADMIN.previewViewer.setEditingMode(currentPart);
-      }
-    };
-  });
-
-  ['frente', 'costas', 'manga', 'gola'].forEach(part => {
-    setupUpload(c, part, () => {});
-  });
-
-  document.getElementById('saveTexSettings').onclick = async () => {
-    if (!ADMIN.previewViewer) return;
-    const cfg = ADMIN.previewViewer.configs;
-    const dados = {
-      scale_frente: cfg.frente.scale, x_frente: cfg.frente.x, y_frente: cfg.frente.y,
-      scale_costas: cfg.costas.scale, x_costas: cfg.costas.x, y_costas: cfg.costas.y,
-      scale_manga: cfg.manga.scale, x_manga: cfg.manga.x, y_manga: cfg.manga.y,
-      scale_gola: cfg.gola.scale
-    };
-    const r = await window.__apiPost({ action:'updateCamiseta', senha:getSenha(), id: c.id, dados });
-    if(r.ok) { 
-      Object.assign(c, dados); 
-      window.__toast('Ajustes de estampa salvos!', false); 
-    } else {
-      window.__toast('Erro ao salvar as estampas.', true);
-    }
+  document.getElementById('backTexBtn').onclick = () => { 
+    destroyPreview(); 
+    openAdminTab('camisetas'); 
   };
 
   initAdminPreview(c).then(() => {
-    Promise.all([
-      window.__loadTexture(c.textura_principal, c.cor_base),
-      window.__loadTexture(c.textura_costas, c.cor_base),
-      window.__loadTexture(c.textura_manga, c.cor_base),
-      window.__loadTexture(c.textura_gola, c.cor_base)
-    ]).then(([f, cB, m, g]) => {
-      ADMIN.previewViewer.setTextures(f, cB, m, g, ADMIN.previewViewer.configs);
-      setMode(true);
+    if(!ADMIN.previewViewer) return;
+
+    // Cores em tempo real
+    ['corCorpo', 'corCabelo', 'corCalca', 'corSapato'].forEach(id => {
+      document.getElementById(id).oninput = () => {
+        ADMIN.previewViewer.setColors({
+          corpo: document.getElementById('corCorpo').value,
+          cabelo: document.getElementById('corCabelo').value,
+          calca: document.getElementById('corCalca').value,
+          sapato: document.getElementById('corSapato').value
+        });
+      };
     });
+
+    document.getElementById('corBase').oninput = () => {
+      ADMIN.previewViewer.setTextures(null, null, null, null, ADMIN.previewViewer.getConfigs(), document.getElementById('corBase').value);
+    };
+
+    // Uploads com Base64
+    const handleUpload = async (e, inputId, textureKey) => {
+      const file = e.target.files[0];
+      if (file) {
+        const base64 = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = () => resolve(reader.result);
+        });
+        document.getElementById(inputId).value = base64; 
+        
+        window.__loadTexture(base64, c.cor_base).then(t => {
+          const args = { frente: [t, null, null, null], costas: [null, t, null, null], manga: [null, null, t, null], gola: [null, null, null, t] }[textureKey];
+          ADMIN.previewViewer.setTextures(...args, ADMIN.previewViewer.getConfigs(), document.getElementById('corBase').value);
+        });
+      }
+    };
+
+    document.getElementById('fileFrente').onchange = (e) => handleUpload(e, 'urlFrente', 'frente');
+    document.getElementById('fileCostas').onchange = (e) => handleUpload(e, 'urlCostas', 'costas');
+    document.getElementById('fileManga').onchange = (e) => handleUpload(e, 'urlManga', 'manga');
+    document.getElementById('fileGola').onchange = (e) => handleUpload(e, 'urlGola', 'gola');
+
+    // URLs
+    const handleUrl = (e, textureKey) => {
+      window.__loadTexture(e.target.value, c.cor_base).then(t => {
+        const args = { frente: [t, null, null, null], costas: [null, t, null, null], manga: [null, null, t, null], gola: [null, null, null, t] }[textureKey];
+        ADMIN.previewViewer.setTextures(...args, ADMIN.previewViewer.getConfigs(), document.getElementById('corBase').value);
+      });
+    };
+    document.getElementById('urlFrente').onchange = (e) => handleUrl(e, 'frente');
+    document.getElementById('urlCostas').onchange = (e) => handleUrl(e, 'costas');
+    document.getElementById('urlManga').onchange = (e) => handleUrl(e, 'manga');
+    document.getElementById('urlGola').onchange = (e) => handleUrl(e, 'gola');
+
+    // Salvar
+    document.getElementById('saveCamisetaBtn').onclick = async () => {
+      const cfgFrente = ADMIN.previewViewer.getConfigs().frente;
+      const cfgCostas = ADMIN.previewViewer.getConfigs().costas;
+      const cfgManga = ADMIN.previewViewer.getConfigs().manga;
+      const cfgGola = ADMIN.previewViewer.getConfigs().gola;
+      
+      const dados = {
+        textura_principal: document.getElementById('urlFrente').value,
+        textura_costas: document.getElementById('urlCostas').value,
+        textura_manga: document.getElementById('urlManga').value,
+        textura_gola: document.getElementById('urlGola').value,
+        x_frente: cfgFrente.x, y_frente: cfgFrente.y, scale_frente: cfgFrente.scale,
+        x_costas: cfgCostas.x, y_costas: cfgCostas.y, scale_costas: cfgCostas.scale,
+        x_manga: cfgManga.x, y_manga: cfgManga.y, scale_manga: cfgManga.scale,
+        x_gola: cfgGola.x, y_gola: cfgGola.y, scale_gola: cfgGola.scale,
+        cor_corpo: document.getElementById('corCorpo').value,
+        cor_cabelo: document.getElementById('corCabelo').value,
+        cor_calca: document.getElementById('corCalca').value,
+        cor_sapato: document.getElementById('corSapato').value,
+        cor_base: document.getElementById('corBase').value
+      };
+      const r = await window.__apiPost({ action:'updateCamiseta', senha:getSenha(), id: c.id, dados });
+      if (r.ok) {
+        Object.assign(c, dados);
+        window.__toast('Modelo salvo com sucesso!', false);
+      } else {
+        window.__toast('Erro ao salvar.', true);
+      }
+    };
   });
 }
 
-function setupUpload(cam, tipo, cb) {
-  const zone = document.querySelector(`[data-upload="${tipo}"]`);
-  const input = document.querySelector(`[data-file="${tipo}"]`);
-  const status = document.querySelector(`[data-status="${tipo}"]`);
-  
-  zone.onclick = () => input.click();
-  input.onchange = async () => {
-    if (!input.files[0]) return;
-    status.textContent = 'Enviando...';
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const dataUrl = ev.target.result;
-      const tex = new THREE.TextureLoader().load(dataUrl);
-      tex.colorSpace = THREE.SRGBColorSpace; tex.flipY = false;
-      
-      if (ADMIN.previewViewer) {
-        const currentTextures = ADMIN.previewViewer.textures;
-        currentTextures[tipo] = tex;
-        ADMIN.previewViewer.setTextures(currentTextures.frente, currentTextures.costas, currentTextures.manga, currentTextures.gola, ADMIN.previewViewer.configs);
-      }
-
-      const base64 = dataUrl.split(',')[1];
-      const r = await window.__apiPost({
-        action:'uploadImagem', senha:getSenha(), camiseta_id: cam.id, tipo, base64,
-        filename: input.files[0].name, mimeType: input.files[0].type
-      });
-      
-      if (r.ok) {
-        const campo = tipo === 'frente' ? 'textura_principal' : tipo === 'costas' ? 'textura_costas' : `textura_${tipo}`;
-        cam[campo] = r.url;
-        status.textContent = '✓ Salva!';
-        window.__toast('Imagem enviada com sucesso!', false);
-      } else {
-        status.textContent = '✗ Erro';
-        window.__toast('Erro ao fazer upload da imagem.', true);
-      }
-    };
-    reader.readAsDataURL(input.files[0]);
-  };
-}
-
 async function initAdminPreview(cam) {
-  const el = document.getElementById('adminPreview');
-  destroyPreview();
+  const el = document.getElementById('adminPreview'); 
+  destroyPreview(); 
   await new Promise(r => setTimeout(r, 60));
-  ADMIN.previewViewer = await window.__createViewer(el, cam, { autoRotate: false });
+  ADMIN.previewViewer = await window.__createViewer(el, cam);
 }
 
-function destroyPreview() {
-  if (ADMIN.previewViewer) { ADMIN.previewViewer.destroy(); ADMIN.previewViewer = null; }
+function destroyPreview() { 
+  if (ADMIN.previewViewer) { 
+    ADMIN.previewViewer.destroy(); 
+    ADMIN.previewViewer = null; 
+  } 
 }
