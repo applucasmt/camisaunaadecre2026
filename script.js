@@ -231,7 +231,6 @@ async function initApp() {
   const container = document.getElementById('webgl-container');
   const scene = new THREE.Scene();
   
-  // CÂMERA INICIAL AJUSTADA: Mais perto (Z=3.8)
   const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
   camera.position.set(0, 1.3, 3.8); 
   camera.lookAt(0, 1.0, 0);
@@ -265,7 +264,6 @@ async function initApp() {
     modelsData.push({ wrapper, spinner, index: i });
   }
 
-  // Variáveis de controle de câmera (Zoom mais perto)
   const camState = { y: 1.3, z: 3.8 };
   const lookState = { y: 1.0 };
 
@@ -277,22 +275,18 @@ async function initApp() {
   }
   updateCamera();
 
-  // ==========================================
-  // TIMELINE DO SCROLL
-  // ==========================================
-
-  // S1 -> S2: Zoom no Modelo 1 (Z cai de 3.8 para 2.0 - Muito perto!)
+  // S1 -> S2: Zoom e foco na cintura
   ScrollTrigger.create({
     trigger: "#s2", start: "top bottom", end: "top top", scrub: 1,
     onUpdate: self => {
       const p = self.progress;
-      camState.z = THREE.MathUtils.lerp(3.8, 2.0, p); // Zoom In 2x
-      camState.y = THREE.MathUtils.lerp(1.3, 1.4, p); // Sobe um pouco
-      lookState.y = THREE.MathUtils.lerp(1.0, 1.3, p); // Olha para o peito
+      camState.z = THREE.MathUtils.lerp(3.8, 2.0, p); 
+      camState.y = THREE.MathUtils.lerp(1.3, 1.4, p); 
+      lookState.y = THREE.MathUtils.lerp(1.0, 1.3, p); 
     }
   });
 
-  // S2 -> S3: Modelo 1 gira 180 graus
+  // S2 -> S3: Rotação Modelo 1
   ScrollTrigger.create({
     trigger: "#s3", start: "top bottom", end: "top top", scrub: 1,
     onUpdate: self => {
@@ -301,7 +295,7 @@ async function initApp() {
     }
   });
 
-  // S3 -> S4: Transição (Modelo 1 sai, Modelo 2 entra)
+  // S3 -> S4: Transição Modelo 1 para Modelo 2
   ScrollTrigger.create({
     trigger: "#s4", start: "top bottom", end: "top top", scrub: 1,
     onUpdate: self => {
@@ -312,7 +306,7 @@ async function initApp() {
     }
   });
 
-  // S4 -> S5: Modelo 2 gira 180 graus
+  // S4 -> S5: Rotação Modelo 2
   ScrollTrigger.create({
     trigger: "#s5", start: "top bottom", end: "top top", scrub: 1,
     onUpdate: self => {
@@ -321,7 +315,7 @@ async function initApp() {
     }
   });
 
-  // S5 -> S6: Transição (Modelo 2 sai, Modelo 3 entra)
+  // S5 -> S6: Transição Modelo 2 para Modelo 3
   ScrollTrigger.create({
     trigger: "#s6", start: "top bottom", end: "top top", scrub: 1,
     onUpdate: self => {
@@ -332,7 +326,7 @@ async function initApp() {
     }
   });
 
-  // S6 -> S7: Modelo 3 gira 180 graus
+  // S6 -> S7: Rotação Modelo 3
   ScrollTrigger.create({
     trigger: "#s7", start: "top bottom", end: "top top", scrub: 1,
     onUpdate: self => {
@@ -350,6 +344,18 @@ async function initApp() {
       onLeaveBack: () => box.classList.remove('visible')
     });
   });
+
+  // Lógica do Popup de Deslizar
+  const popup = document.getElementById('scrollPopup');
+  if (popup) {
+    window.addEventListener('scroll', () => {
+      if (window.scrollY > 50) {
+        popup.classList.add('hidden');
+      } else {
+        popup.classList.remove('hidden');
+      }
+    });
+  }
 
   function animate() {
     requestAnimationFrame(animate);
