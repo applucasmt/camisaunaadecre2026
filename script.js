@@ -297,7 +297,7 @@ async function createViewer(el, cam, options = {}) {
 }
 window.__createViewer = createViewer;
 
-// ============ HERO VIEWER (CARROSSEL 3D COM GIRO INDIVIDUAL E BLOQUEIO) ============
+// ============ HERO VIEWER (CARROSSEL CONTROLADO) ============
 async function initHeroViewer() {
   const el = document.getElementById('heroViewer');
   if (!el || state.camisetas.length === 0) return;
@@ -307,16 +307,13 @@ async function initHeroViewer() {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
-  // Enquadramento da cintura para cima
   camera.position.set(0, 1.15, 2.8); 
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  
-  // BLOQUEIO DE INTERAÇÃO: Não deixa o usuário mexer na câmera
-  renderer.domElement.style.pointerEvents = 'none';
+  renderer.domElement.style.pointerEvents = 'none'; // BLOQUEIO TOTAL DO MOUSE NO HERO
   
   el.appendChild(renderer.domElement);
 
@@ -335,72 +332,81 @@ async function initHeroViewer() {
 
   for (let i = 0; i < totalModels; i++) {
     const { wrapper } = await buildMannequin(state.camisetas[i]);
-    // Distribui os modelos no círculo
     const angle = (i / totalModels) * Math.PI * 2;
     wrapper.position.set(Math.sin(angle) * radius, 0, Math.cos(angle) * radius);
-    
-    // Inicializa todos virados para frente
-    wrapper.rotation.y = -angle; 
-
+    wrapper.rotation.y = -angle; // Compensa a posição circular para já nascer de frente
     carouselGroup.add(wrapper);
     wrappers.push(wrapper);
   }
 
   let currentIndex = 0;
-  let statePhase = 'spinning_model'; 
+  // Fases: 'turning_back' -> 'pausing_back' -> 'turning_front' -> 'pausing_front' -> 'moving_carousel'
+  let statePhase = 'turning_back'; 
   let phaseTimer = 0;
   
-  const modelSpinSpeed = 1.2; 
-  const timeSpinning = 4.0; 
-  const timeMoving = 2.5; 
-  
   let currentCarouselAngle = 0;
-  let extraSpinAngle = 0; // Acumulador do giro individual do modelo atual
+  let targetCarouselAngle = 0;
+  let extraSpinAngle = 0; 
+
   const clock = new THREE.Clock();
 
   function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
+    const t = clock.getElapsedTime();
 
-    if (statePhase === 'spinning_model') {
-      // O modelo gira no próprio eixo
-      extraSpinAngle += modelSpinSpeed * delta;
-      
-      phaseTimer += delta;
-      if (phaseTimer > timeSpinning) {
-        extraSpinAngle = 0; // Reseta o giro para o próximo
-        statePhase = 'moving_carousel';
-        phaseTimer = 0;
-      }
+    phaseTimer += delta;
+
+    // GERENCIAMENTO DAS FASES
+    if (statePhase === 'turning_back') {
+      // Gira o modelo atual no próprio eixo até 180 graus (mostrar as costas)
+      extraSpinAngle = Math.min(Math.PI, extraSpinAngle + delta * 2.0); 
+      if (extraSpinAngle >= Math.PI) { statePhase = 'pausing_back'; phaseTimer = 0; }
     } 
+    else if (statePhase === 'pausing_back') {
+      // Pausa de 1.5s mostrando as costas
+      if (phaseTimer > 1.5) { statePhase = 'turning_front'; }
+    }
+    else if (statePhase === 'turning_front') {
+      // Gira de volta para a frente (0 graus)
+      extraSpinAngle = Math.max(0, extraSpinAngle - delta * 2.0);
+      if (extraSpinAngle <= 0) { statePhase = 'pausing_front'; phaseTimer = 0; }
+    }
+    else if (statePhase === 'pausing_front') {
+      // Pausa de 1s mostrando a frente
+      if (phaseTimer > 1.0) {
+        statePhase = 'moving_carousel';
+        targetCarouselAngle = -((currentIndex + 1) / totalModels) * Math.PI * 2;
+      }
+    }
     else if (statePhase === 'moving_carousel') {
-      // O carrossel gira para o próximo
-      const targetAngle = -((currentIndex + 1) / totalModels) * Math.PI * 2;
-      const smoothFactor = 1 - Math.exp(-3.0 * delta); 
-      currentCarouselAngle += (targetAngle - currentCarouselAngle) * smoothFactor;
+      // O carrossel gira suavemente para o próximo
+      const smoothFactor = 1 - Math.exp(-4.0 * delta); 
+      currentCarouselAngle += (targetCarouselAngle - currentCarouselAngle) * smoothFactor;
       
-      phaseTimer += delta;
-      if (phaseTimer > timeMoving) {
+      if (Math.abs(targetCarouselAngle - currentCarouselAngle) < 0.01) {
+        // Finaliza a troca
+        currentCarouselAngle = targetCarouselAngle;
         currentIndex = (currentIndex + 1) % totalModels;
-        currentCarouselAngle = -(currentIndex / totalModels) * Math.PI * 2;
-        statePhase = 'spinning_model';
+        statePhase = 'turning_back';
         phaseTimer = 0;
+        extraSpinAngle = 0;
       }
     }
 
-    // Aplica as rotações
+    // APLICA AS ROTAÇÕES NO GRUPO E NOS MODELOS
     carouselGroup.rotation.y = currentCarouselAngle;
     
     wrappers.forEach((w, i) => {
-      // Todos os manequins precisam desfazer a rotação do carrossel para ficarem "de frente"
       const angleOffset = (i / totalModels) * Math.PI * 2;
+      // Compensa a rotação do carrossel para ficar de frente
       const camCompensation = -currentCarouselAngle - angleOffset;
       
       if (i === currentIndex) {
-        // O modelo ativo soma o giro individual
+        // O modelo que está na frente executa o giro individual (mostra as costas)
         w.rotation.y = camCompensation + extraSpinAngle;
       } else {
-        // Os outros apenas ficam virados para frente
+        // Os modelos que estão atrás apenas olham para frente
         w.rotation.y = camCompensation;
       }
     });
