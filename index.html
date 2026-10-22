@@ -3,13 +3,16 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="Apresentação 3D interativa da coleção de camisetas. Gire, aproxime e explore cada detalhe." />
 <title>Elegance Wear — Apresentação 3D</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
+<!-- ================= HEADER ================= -->
 <header class="header" id="header">
   <div class="container header-inner">
     <a href="#" class="logo" id="siteLogo">ELEGANCE<span>·</span>WEAR</a>
@@ -18,13 +21,13 @@
       <a href="#showcase">Coleção 3D</a>
       <a href="#sobre">Sobre</a>
     </nav>
-    <button class="menu-toggle" id="menuToggle" aria-label="Menu">
+    <button class="menu-toggle" id="menuToggle" aria-label="Abrir menu">
       <span></span><span></span><span></span>
     </button>
   </div>
 </header>
 
-<!-- HERO com manequim interativo -->
+<!-- ================= HERO ================= -->
 <section class="hero" id="hero">
   <div class="container hero-inner">
     <div class="hero-text">
@@ -46,7 +49,7 @@
   <div class="scroll-hint">⌄</div>
 </section>
 
-<!-- SHOWCASE -->
+<!-- ================= SHOWCASE ================= -->
 <section class="showcase" id="showcase">
   <div class="container">
     <div class="section-head">
@@ -54,11 +57,13 @@
       <h2>Explore os 3 modelos</h2>
       <p>Clique em "Explorar em 3D" para interagir com o manequim.</p>
     </div>
-    <div class="products-grid" id="productsGrid"></div>
+    <div class="products-grid" id="productsGrid">
+      <!-- preenchido via JS -->
+    </div>
   </div>
 </section>
 
-<!-- SOBRE -->
+<!-- ================= SOBRE ================= -->
 <section class="sobre" id="sobre">
   <div class="container sobre-inner">
     <div class="sobre-text">
@@ -79,17 +84,18 @@
   </div>
 </section>
 
+<!-- ================= FOOTER ================= -->
 <footer class="footer">
   <div class="container footer-inner">
     <div>
       <p id="footerText">© 2026 Elegance Wear. Apresentação de coleção.</p>
       <p class="socials" id="socials"></p>
     </div>
-    <button class="lock-btn" id="lockBtn" title="Painel Admin">🔒</button>
+    <button class="lock-btn" id="lockBtn" title="Painel Admin" aria-label="Painel Admin">🔒</button>
   </div>
 </footer>
 
-<!-- MODAL FULLSCREEN VIEWER -->
+<!-- ================= VIEWER MODAL (FULLSCREEN) ================= -->
 <div class="viewer-modal" id="viewerModal">
   <div class="viewer-modal-header">
     <div>
@@ -102,12 +108,12 @@
     <div id="fullViewer" class="viewer full"></div>
     <div class="viewer-controls">
       <button class="btn-ghost" id="resetView">Resetar câmera</button>
-      <button class="btn-ghost" id="toggleAuto">Pausar rotação</button>
+      <button class="btn-ghost" id="toggleAuto" data-paused="0">Pausar rotação</button>
     </div>
   </div>
 </div>
 
-<!-- LOGIN MODAL -->
+<!-- ================= LOGIN MODAL ================= -->
 <div class="modal" id="loginModal">
   <div class="modal-card">
     <h3>Painel Administrativo</h3>
@@ -121,7 +127,7 @@
   </div>
 </div>
 
-<!-- ADMIN PANEL -->
+<!-- ================= ADMIN PANEL ================= -->
 <div class="admin-panel" id="adminPanel">
   <div class="admin-header">
     <h2>🎛️ Painel Administrativo</h2>
@@ -133,8 +139,10 @@
   </div>
 </div>
 
+<!-- ================= THREE.JS + LOADERS ================= -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
 
 <script src="script.js"></script>
 <script src="admin.js"></script>
