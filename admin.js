@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 const ADMIN = {
   logado: false,
   abaAtiva: 'config',
@@ -42,10 +44,6 @@ document.addEventListener('DOMContentLoaded', () => {
       loginError.textContent = 'Senha incorreta';
       setTimeout(() => loginError.textContent = '', 2500);
     }
-  });
-
-  senhaInput?.addEventListener('keydown', e => {
-    if (e.key === 'Enter') loginBtn.click();
   });
 
   closeAdmin?.addEventListener('click', () => {
@@ -95,11 +93,6 @@ function renderConfigTab(container) {
     <div class="admin-form" id="configForm">
       <div><label>Título do site</label><input name="titulo_site" value="${c.titulo_site || ''}"></div>
       <div><label>Subtítulo</label><input name="subtitulo_site" value="${c.subtitulo_site || ''}"></div>
-      <div><label>Texto do botão principal</label><input name="cta_texto" value="${c.cta_texto || ''}"></div>
-      <div><label>Cor secundária (hex)</label><input name="cor_secundaria" value="${c.cor_secundaria || '#d4af37'}"></div>
-      <div><label>Instagram</label><input name="instagram" value="${c.instagram || ''}"></div>
-      <div><label>E-mail</label><input name="email" value="${c.email || ''}"></div>
-      <div><label>Rodapé</label><input name="rodape" value="${c.rodape || ''}"></div>
       <div><label>Senha Admin</label><input name="admin_senha" value="${c.admin_senha || '20266'}"></div>
       <button class="btn-primary" id="saveConfigBtn">Salvar</button>
     </div>
@@ -111,22 +104,12 @@ function renderConfigTab(container) {
     const r = await window.__apiPost({ action:'updateConfig', senha:getSenha(), dados });
     if (r.ok) {
       Object.assign(window.__state.config, dados);
-      applyConfigDOM();
       window.__toast('Textos salvos!');
     } else window.__toast(r.error || 'Erro', true);
   };
 }
 
-function applyConfigDOM() {
-  const c = window.__state.config;
-  if (c.titulo_site) document.getElementById('heroTitle').textContent = c.titulo_site;
-  if (c.subtitulo_site) document.getElementById('heroSub').textContent = c.subtitulo_site;
-  if (c.cta_texto) document.getElementById('heroCta').textContent = c.cta_texto;
-  if (c.rodape) document.getElementById('footerText').textContent = c.rodape;
-  if (c.cor_secundaria) document.documentElement.style.setProperty('--secondary', c.cor_secundaria);
-}
-
-// ============ CAMISETAS ============
+// ============ MODELOS ============
 function renderCamisetasTab(container) {
   const list = window.__state.camisetas;
   container.innerHTML = `
@@ -136,64 +119,25 @@ function renderCamisetasTab(container) {
         <div style="border:1px solid var(--border);border-radius:12px;padding:20px;display:flex;gap:20px;align-items:center;flex-wrap:wrap;">
           <div style="flex:1;min-width:200px;">
             <strong>${c.nome}</strong><br>
-            <span style="color:var(--text-dim);font-size:.85rem;">${c.destaque || '—'}</span>
           </div>
-          <div style="display:flex;gap:8px;">
-            <button class="btn-primary" data-edit="${c.id}">Editar</button>
-            <button class="btn-ghost" data-tex="${c.id}">Texturas</button>
-          </div>
+          <button class="btn-ghost" data-tex="${c.id}">Trocar Textura</button>
         </div>
       `).join('')}
     </div>
   `;
-  container.querySelectorAll('[data-edit]').forEach(b => {
-    b.onclick = () => editCamisetaInfo(parseInt(b.dataset.edit));
-  });
   container.querySelectorAll('[data-tex]').forEach(b => {
     b.onclick = () => editCamisetaTexturas(parseInt(b.dataset.tex));
   });
-}
-
-function editCamisetaInfo(id) {
-  const c = window.__state.camisetas.find(x => String(x.id) === String(id));
-  if (!c) return;
-  const content = document.getElementById('adminContent');
-  content.innerHTML = `
-    <h2 style="margin-bottom:24px;">Editar: ${c.nome}</h2>
-    <div class="admin-form" id="editForm">
-      <div><label>Nome</label><input name="nome" value="${c.nome}"></div>
-      <div><label>Descrição</label><textarea name="descricao">${c.descricao || ''}</textarea></div>
-      <div><label>Tag/destaque</label><input name="destaque" value="${c.destaque || ''}"></div>
-      <div><label>Cor base (hex)</label><input name="cor_base" value="${c.cor_base || '#111111'}"></div>
-      <div style="display:flex;gap:12px;">
-        <button class="btn-primary" id="saveCamBtn">Salvar</button>
-        <button class="btn-ghost" id="backBtn">Voltar</button>
-      </div>
-    </div>
-  `;
-  document.getElementById('backBtn').onclick = () => openAdminTab('camisetas');
-  document.getElementById('saveCamBtn').onclick = async () => {
-    const form = document.getElementById('editForm');
-    const dados = {};
-    form.querySelectorAll('input, textarea').forEach(i => dados[i.name] = i.value);
-    const r = await window.__apiPost({ action:'updateCamiseta', senha:getSenha(), id, dados });
-    if (r.ok) { Object.assign(c, dados); window.__toast('Modelo atualizado!'); openAdminTab('camisetas'); }
-    else window.__toast(r.error || 'Erro', true);
-  };
 }
 
 // ============ TEXTURAS ============
 function renderTexturasTab(container) {
   container.innerHTML = `
     <h2 style="margin-bottom:24px;">🎨 Texturas por Modelo</h2>
-    <p style="color:var(--text-dim);margin-bottom:24px;">Escolha um modelo para subir a textura PNG/JPG.</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;">
       ${window.__state.camisetas.map(c => `
         <div style="border:1px solid var(--border);border-radius:12px;padding:20px;cursor:pointer;" data-t="${c.id}">
           <strong>${c.nome}</strong>
-          <div style="margin-top:12px;display:grid;gap:6px;font-size:.8rem;color:var(--text-dim);">
-            <span>${c.textura_principal ? '✅ Textura aplicada' : '⬜ Sem textura'}</span>
-          </div>
         </div>
       `).join('')}
     </div>
@@ -209,15 +153,13 @@ function editCamisetaTexturas(id) {
   const content = document.getElementById('adminContent');
   content.innerHTML = `
     <h2 style="margin-bottom:16px;">Textura: ${c.nome}</h2>
-    <p style="color:var(--text-dim);margin-bottom:24px;">Substitua a imagem. O preview 3D ao lado atualiza na hora.</p>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
       <div class="admin-form">
         <div>
           <label>Textura Principal (PNG/JPG)</label>
           <div class="upload-zone" data-upload="principal">
             <input type="file" accept="image/*" data-file="principal">
-            <p>📤 Clique para enviar a nova estampa</p>
-            ${c.textura_principal ? `<img src="${c.textura_principal}" class="preview-thumb" crossorigin="anonymous">` : ''}
+            <p>📤 Clique para enviar</p>
             <p class="upload-status" data-status="principal" style="color:var(--secondary);font-size:.8rem;margin-top:8px;"></p>
           </div>
         </div>
@@ -249,12 +191,18 @@ function setupUpload(cam) {
   input.onchange = async () => {
     const file = input.files[0];
     if (!file) return;
-    status.textContent = 'Enviando para o Drive...';
+    status.textContent = 'Enviando para o Google Drive...';
 
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const dataUrl = ev.target.result;
-      updatePreviewTexture(dataUrl); // Preview imediato local
+      
+      // Preview local imediato
+      if (ADMIN.previewViewer) {
+        const tex = new THREE.TextureLoader().load(dataUrl);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        ADMIN.previewViewer.setTexture(tex);
+      }
 
       const base64 = dataUrl.split(',')[1];
       try {
@@ -265,19 +213,14 @@ function setupUpload(cam) {
         });
         if (r.ok) {
           cam.textura_principal = r.url;
-          status.textContent = '✓ Enviada com sucesso!';
-          window.__toast('Textura salva na planilha!');
+          status.textContent = '✓ Salva na planilha!';
+          window.__toast('Textura salva!');
           
-          // Atualiza instantaneamente os modelos na página principal
+          // Atualiza a página principal ao vivo
           if (window.__state.productViewers[cam.id]) {
-            window.__loadTexture(r.url).then(tex => {
-              window.__state.productViewers[cam.id].setTexture(tex);
-            });
-          }
-          if (window.__state.heroViewer && String(window.__state.camisetas[0].id) === String(cam.id)) {
-            window.__loadTexture(r.url).then(tex => {
-              window.__state.heroViewer.setTexture(tex);
-            });
+            const tex = new THREE.TextureLoader().load(r.url);
+            tex.colorSpace = THREE.SRGBColorSpace;
+            window.__state.productViewers[cam.id].setTexture(tex);
           }
         } else {
           status.textContent = '✗ ' + (r.error || 'Erro');
@@ -293,22 +236,9 @@ async function initAdminPreview(cam) {
   if (!el) return;
   destroyPreview();
   await new Promise(r => setTimeout(r, 60));
-  try {
+  if (window.__createViewer) {
     ADMIN.previewViewer = await window.__createViewer(el, cam, { autoRotate: true });
-  } catch (e) {
-    console.error(e);
-    el.innerHTML = '<p style="padding:20px;color:#ff4d4d;font-size:.85rem;">Falha ao carregar 3D</p>';
   }
-}
-
-function updatePreviewTexture(dataUrl) {
-  if (!ADMIN.previewViewer) return;
-  const loader = new THREE.TextureLoader();
-  loader.load(dataUrl, (tex) => {
-    tex.anisotropy = 8;
-    tex.colorSpace = THREE.SRGBColorSpace;
-    ADMIN.previewViewer.setTexture(tex);
-  });
 }
 
 function destroyPreview() {
