@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('loginModal').classList.remove('active');
       document.getElementById('adminPanel').classList.add('active');
       renderAdminSidebar(); openAdminTab('config');
-      window.__toast('Bem-vindo!');
+      window.__toast('Bem-vindo!', false);
     } else {
       document.getElementById('loginError').textContent = 'Senha incorreta';
       setTimeout(() => document.getElementById('loginError').textContent = '', 2500);
@@ -61,12 +61,17 @@ function renderConfigTab(container) {
     <div class="admin-form" id="configForm">
       <div><label>Título</label><input name="titulo_site" value="${c.titulo_site || ''}"></div>
       <div><label>Subtítulo</label><input name="subtitulo_site" value="${c.subtitulo_site || ''}"></div>
-      <button class="btn-primary" id="saveConfigBtn">Salvar</button>
+      <button class="btn-primary" id="saveConfigBtn">Salvar Alterações</button>
     </div>`;
   document.getElementById('saveConfigBtn').onclick = async () => {
     const dados = {}; document.querySelectorAll('#configForm input').forEach(i => dados[i.name] = i.value);
     const r = await window.__apiPost({ action:'updateConfig', senha:getSenha(), dados });
-    if (r.ok) { Object.assign(window.__state.config, dados); window.__toast('Salvo!'); }
+    if (r.ok) { 
+      Object.assign(window.__state.config, dados); 
+      window.__toast('Textos salvos com sucesso!', false); 
+    } else {
+      window.__toast('Erro ao salvar textos.', true);
+    }
   };
 }
 
@@ -194,7 +199,12 @@ function editCamisetaTexturas(id) {
       cor_calca: document.getElementById('colorCalca').value
     };
     const r = await window.__apiPost({ action:'updateCamiseta', senha:getSenha(), id: c.id, dados });
-    if(r.ok) { Object.assign(c, dados); window.__toast('Cores salvas!'); }
+    if(r.ok) { 
+      Object.assign(c, dados); 
+      window.__toast('Cores salvas com sucesso!', false); 
+    } else {
+      window.__toast('Erro ao salvar as cores na planilha.', true);
+    }
   };
 
   let currentPart = 'frente';
@@ -251,7 +261,12 @@ function editCamisetaTexturas(id) {
       scale_gola: cfg.gola.scale
     };
     const r = await window.__apiPost({ action:'updateCamiseta', senha:getSenha(), id: c.id, dados });
-    if(r.ok) { Object.assign(c, dados); window.__toast('Ajustes de estampa salvos!'); }
+    if(r.ok) { 
+      Object.assign(c, dados); 
+      window.__toast('Ajustes de estampa salvos!', false); 
+    } else {
+      window.__toast('Erro ao salvar as estampas.', true);
+    }
   };
 
   initAdminPreview(c).then(() => {
@@ -298,8 +313,11 @@ function setupUpload(cam, tipo, cb) {
         const campo = tipo === 'frente' ? 'textura_principal' : tipo === 'costas' ? 'textura_costas' : `textura_${tipo}`;
         cam[campo] = r.url;
         status.textContent = '✓ Salva!';
-        window.__toast('Imagem enviada!');
-      } else status.textContent = '✗ Erro';
+        window.__toast('Imagem enviada com sucesso!', false);
+      } else {
+        status.textContent = '✗ Erro';
+        window.__toast('Erro ao fazer upload da imagem.', true);
+      }
     };
     reader.readAsDataURL(input.files[0]);
   };
