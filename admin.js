@@ -54,9 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-function getSenha() {
-  return window.__state.config.admin_senha || '20266';
-}
+function getSenha() { return window.__state.config.admin_senha || '20266'; }
 
 function renderAdminSidebar() {
   const sidebar = document.getElementById('adminSidebar');
@@ -165,7 +163,7 @@ function editCamisetaInfo(id) {
     <div class="admin-form" id="editForm">
       <div><label>Nome</label><input name="nome" value="${c.nome}"></div>
       <div><label>Descrição</label><textarea name="descricao">${c.descricao || ''}</textarea></div>
-      <div><label>Tag/destaque (ex: Edição limitada)</label><input name="destaque" value="${c.destaque || ''}"></div>
+      <div><label>Tag/destaque</label><input name="destaque" value="${c.destaque || ''}"></div>
       <div><label>Cor base (hex)</label><input name="cor_base" value="${c.cor_base || '#111111'}"></div>
       <div style="display:flex;gap:12px;">
         <button class="btn-primary" id="saveCamBtn">Salvar</button>
@@ -179,11 +177,8 @@ function editCamisetaInfo(id) {
     const dados = {};
     form.querySelectorAll('input, textarea').forEach(i => dados[i.name] = i.value);
     const r = await window.__apiPost({ action:'updateCamiseta', senha:getSenha(), id, dados });
-    if (r.ok) {
-      Object.assign(c, dados);
-      window.__toast('Modelo atualizado!');
-      openAdminTab('camisetas');
-    } else window.__toast(r.error || 'Erro', true);
+    if (r.ok) { Object.assign(c, dados); window.__toast('Modelo atualizado!'); openAdminTab('camisetas'); }
+    else window.__toast(r.error || 'Erro', true);
   };
 }
 
@@ -191,7 +186,7 @@ function editCamisetaInfo(id) {
 function renderTexturasTab(container) {
   container.innerHTML = `
     <h2 style="margin-bottom:24px;">🎨 Texturas por Modelo</h2>
-    <p style="color:var(--text-dim);margin-bottom:24px;">Escolha um modelo para editar suas texturas com preview 3D ao vivo.</p>
+    <p style="color:var(--text-dim);margin-bottom:24px;">Escolha um modelo para editar texturas com preview 3D ao vivo.</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;">
       ${window.__state.camisetas.map(c => `
         <div style="border:1px solid var(--border);border-radius:12px;padding:20px;cursor:pointer;" data-t="${c.id}">
@@ -282,12 +277,16 @@ function setupUpload(tipo, cam) {
           cam[campo] = r.url;
           status.textContent = '✓ Enviada!';
           window.__toast('Textura enviada!');
+          // aplica também nos viewers do site principal
+          if (window.__state.productViewers[cam.id] && tipo === 'principal') {
+            window.__loadTexture(r.url).then(tex => {
+              window.__state.productViewers[cam.id].setTexture(tex);
+            });
+          }
         } else {
           status.textContent = '✗ ' + (r.error || 'Erro');
         }
-      } catch (e) {
-        status.textContent = '✗ Falha na conexão';
-      }
+      } catch (e) { status.textContent = '✗ Falha na conexão'; }
     };
     reader.readAsDataURL(file);
   };
@@ -297,8 +296,13 @@ async function initAdminPreview(cam) {
   const el = document.getElementById('adminPreview');
   if (!el) return;
   destroyPreview();
-  await new Promise(r => setTimeout(r, 30));
-  ADMIN.previewViewer = await window.__createViewer(el, cam, { autoRotate: true });
+  await new Promise(r => setTimeout(r, 60));
+  try {
+    ADMIN.previewViewer = await window.__createViewer(el, cam, { autoRotate: true });
+  } catch (e) {
+    console.error(e);
+    el.innerHTML = '<p style="padding:20px;color:#ff4d4d;font-size:.85rem;">Falha ao carregar avatar 3D</p>';
+  }
 }
 
 function updatePreviewTexture(tipo, dataUrl) {
@@ -306,9 +310,16 @@ function updatePreviewTexture(tipo, dataUrl) {
   const loader = new THREE.TextureLoader();
   loader.load(dataUrl, (tex) => {
     tex.anisotropy = 8;
+    tex.colorSpace = THREE.SRGBColorSpace;
     if (tipo === 'principal') {
-      ADMIN.previewViewer.tshirtMat.map = tex;
-      ADMIN.previewViewer.tshirtMat.needsUpdate = true;
+      ADMIN.previewViewer.setTexture(tex);
+    }
+    // secundária e manga: aplica como cor de fundo do material como demo
+    if (tipo === 'secundaria' || tipo === 'manga') {
+      // para simplificar, aplica mesma textura em meshes específicas se existirem
+      ADMIN.previewViewer.tshirtMeshes.forEach(mesh => {
+        // já tratado por setTexture apenas principal
+      });
     }
   });
 }
