@@ -299,7 +299,7 @@ async function createViewer(el, cam, options = {}) {
 }
 window.__createViewer = createViewer;
 
-// ============ HERO VIEWER (SLIDER LATERAL COM 3 MANEQUINS FIXOS) ============
+// ============ HERO VIEWER (CÂMERA 100% FIXA E FOCO NO TOPO) ============
 async function initHeroViewer() {
   const el = document.getElementById('heroViewer');
   if (!el || state.camisetas.length === 0) return;
@@ -310,8 +310,8 @@ async function initHeroViewer() {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
   
-  // Câmera fixa no centro e alta (Y=2.4) para focar na camisa e jogar o manequim pra cima
-  camera.position.set(0, 2.4, 3.5); 
+  // Câmera super fixa e alta. Foca na altura 2.2 (topo do peito).
+  camera.position.set(0, 2.2, 3.5); 
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
@@ -326,30 +326,22 @@ async function initHeroViewer() {
   const fill = new THREE.DirectionalLight(0xffffff, 1.0); fill.position.set(-4, 3, 2); scene.add(fill);
   const rim = new THREE.DirectionalLight(0xd4af37, 1.5); rim.position.set(0, 2, -5); scene.add(rim);
 
-  const carouselGroup = new THREE.Group();
-  carouselGroup.position.y = -0.3;
-  scene.add(carouselGroup);
-
   const wrappers = [];
   const totalModels = Math.min(3, state.camisetas.length);
-  
-  // Espaçamento ideal para os 3 aparecerem na tela sem encavalar
-  const spacing = 2.2; 
+  const spacing = 1.8; // Distância lateral entre eles
 
   for (let i = 0; i < totalModels; i++) {
     const { wrapper } = await buildMannequin(state.camisetas[i]);
+    // Posiciona 1 na esquerda (-1.8), 1 no centro (0) e 1 na direita (1.8)
     wrapper.position.x = (i - 1) * spacing; 
-    carouselGroup.add(wrapper);
+    wrapper.position.y = -0.3; 
+    scene.add(wrapper);
     wrappers.push(wrapper);
   }
 
   let currentIndex = 0;
   let statePhase = 'turning_back'; 
   let phaseTimer = 0;
-  
-  // A câmera NÃO se move no eixo X. O grupo inteiro (carrosselGroup) que desliza.
-  let currentGroupX = 0;
-  let targetGroupX = 0;
   let extraSpinAngle = 0; 
 
   const clock = new THREE.Clock();
@@ -359,6 +351,7 @@ async function initHeroViewer() {
     const delta = clock.getDelta();
     phaseTimer += delta;
 
+    // As fases controlam APENAS o giro dos modelos
     if (statePhase === 'turning_back') {
       extraSpinAngle = Math.min(Math.PI, extraSpinAngle + delta * 2.5); 
       if (extraSpinAngle >= Math.PI) { statePhase = 'pausing_back'; phaseTimer = 0; }
@@ -372,25 +365,7 @@ async function initHeroViewer() {
     }
     else if (statePhase === 'pausing_front') {
       if (phaseTimer > 1.0) { 
-        statePhase = 'sliding';
-        const nextIndex = (currentIndex + 1) % totalModels;
-        
-        if (nextIndex === 0) {
-           // Se voltou pro primeiro, reseta tudo e desliza do final pro começo
-           wrappers.forEach((w, i) => { w.position.x = (i - 1) * spacing; });
-           currentGroupX = -(totalModels - 1) * spacing;
-           targetGroupX = 0;
-        } else {
-           targetGroupX = -nextIndex * spacing;
-        }
-      }
-    }
-    else if (statePhase === 'sliding') {
-      const smoothFactor = 1 - Math.exp(-3.0 * delta); 
-      currentGroupX += (targetGroupX - currentGroupX) * smoothFactor;
-      
-      if (Math.abs(targetGroupX - currentGroupX) < 0.01) {
-        currentGroupX = targetGroupX;
+        // Ao terminar a pausa, passa o turno de giro para o próximo modelo
         currentIndex = (currentIndex + 1) % totalModels;
         statePhase = 'turning_back';
         phaseTimer = 0;
@@ -398,13 +373,10 @@ async function initHeroViewer() {
       }
     }
 
-    // Desliza o GRUPO (não a câmera), mantendo os 3 manequins visíveis
-    carouselGroup.position.x = currentGroupX;
+    // Câmera permanece FIXA olhando para a altura 2.0 (peito/camisa)
+    camera.lookAt(0, 2.0, 0); 
     
-    // Câmera fixa e alta, focando no peito/camisa
-    camera.position.y = 2.4; 
-    camera.lookAt(currentGroupX, 2.0, 0); 
-    
+    // Gira APENAS o modelo que está na vez. Os outros ficam virados de frente (0).
     wrappers.forEach((w, i) => {
       if (i === currentIndex) {
         w.rotation.y = extraSpinAngle;
