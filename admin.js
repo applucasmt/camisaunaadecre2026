@@ -93,13 +93,11 @@ function editCamisetaTexturas(id) {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
       <div class="admin-form">
         
-        <!-- ABAS PRINCIPAIS (ESTAMPAS vs CORES) -->
         <div style="display:flex; gap:10px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:10px;">
           <button class="btn-ghost tab-main active" id="tabEstampas" style="flex:1;">🎨 Estampas</button>
           <button class="btn-ghost tab-main" id="tabCores" style="flex:1;">👤 Cores do Manequim</button>
         </div>
 
-        <!-- CONTEÚDO: ESTAMPAS -->
         <div id="contentEstampas">
           <div style="display:flex; gap:10px; margin-bottom:20px; padding:15px; background:rgba(255,255,255,0.05); border-radius:8px;">
             <button class="btn-ghost mode-btn" id="modeRotate" style="flex:1;">🔄 Girar</button>
@@ -135,7 +133,6 @@ function editCamisetaTexturas(id) {
           <button class="btn-primary" id="saveTexSettings" style="margin-top:20px;">Salvar Ajustes de Estampa</button>
         </div>
 
-        <!-- CONTEÚDO: CORES DO MANEQUIM -->
         <div id="contentCores" style="display:none;">
           <p style="color:var(--text-dim); font-size:.9rem; margin-bottom:20px;">Altere a cor do corpo, cabelo e calça do manequim.</p>
           
@@ -164,7 +161,6 @@ function editCamisetaTexturas(id) {
 
   document.getElementById('backTexBtn').onclick = () => { destroyPreview(); openAdminTab('camisetas'); };
 
-  // Controle das Abas Principais
   const tabEstampas = document.getElementById('tabEstampas');
   const tabCores = document.getElementById('tabCores');
   const contentEstampas = document.getElementById('contentEstampas');
@@ -179,7 +175,6 @@ function editCamisetaTexturas(id) {
     contentCores.style.display = 'block'; contentEstampas.style.display = 'none';
   };
 
-  // Lógica de Cores
   const updateColors = () => {
     if (!ADMIN.previewViewer) return;
     ADMIN.previewViewer.setMannequinColors({
@@ -202,7 +197,6 @@ function editCamisetaTexturas(id) {
     if(r.ok) { Object.assign(c, dados); window.__toast('Cores salvas!'); }
   };
 
-  // Lógica de Estampas
   let currentPart = 'frente';
   let isEditMode = true;
 
