@@ -115,7 +115,7 @@ function applyTshirtTexture(root, textures, configs, corBase) {
     if (nome.includes('body_front')) { tex = textures.frente; cfg = configs.frente; baseSize = 0.6; }
     else if (nome.includes('body_back')) { tex = textures.costas; cfg = configs.costas; baseSize = 0.6; }
     else if (nome.includes('sleeves')) { tex = textures.manga; cfg = configs.manga; baseSize = 0.2; }
-    else if (nome.includes('ribbing')) { tex = textures.gola; cfg = configs.gola; baseSize = 0.15; }
+    else if (nome.includes('ribbing') || nome.includes('gola')) { tex = textures.gola; cfg = configs.gola; baseSize = 0.15; }
     else { return; }
 
     const mats = Array.isArray(child.material) ? child.material : [child.material];
@@ -148,13 +148,14 @@ function applyMannequinColors(root, colors) {
     const nome = child.name.toLowerCase();
     
     const isShirt = nome.includes('body_front') || nome.includes('body_back') || 
-                    nome.includes('sleeves') || nome.includes('ribbing');
+                    nome.includes('sleeves') || nome.includes('ribbing') || nome.includes('gola');
     if (isShirt) return;
 
     let colorHex = colors.corpo || '#e0e0e0';
     if (nome.includes('hair') || nome.includes('cabelo')) colorHex = colors.cabelo || '#222222';
     else if (nome.includes('jeans') || nome.includes('pants') || nome.includes('calca') || 
-             nome.includes('leg') || nome.includes('shoe')) colorHex = colors.calca || '#1a1a1a';
+             nome.includes('leg')) colorHex = colors.calca || '#1a1a1a';
+    else if (nome.includes('shoe') || nome.includes('tenis') || nome.includes('sapato')) colorHex = colors.sapato || '#ffffff';
 
     if (colorHex) {
       const mats = Array.isArray(child.material) ? child.material : [child.material];
@@ -210,13 +211,14 @@ async function buildMannequin(cam) {
     frente: { scale: parseFloat(cam.scale_frente)||1, x: parseFloat(cam.x_frente)||0, y: parseFloat(cam.y_frente)||0 },
     costas: { scale: parseFloat(cam.scale_costas)||1, x: parseFloat(cam.x_costas)||0, y: parseFloat(cam.y_costas)||0 },
     manga: { scale: parseFloat(cam.scale_manga)||1, x: parseFloat(cam.x_manga)||0, y: parseFloat(cam.y_manga)||0 },
-    gola: { scale: parseFloat(cam.scale_gola)||1, x: 0, y: 0 }
+    gola: { scale: parseFloat(cam.scale_gola)||1, x: parseFloat(cam.x_gola)||0, y: parseFloat(cam.y_gola)||0 }
   };
 
   const mannequinColors = {
     corpo: cam.cor_corpo || '#e0e0e0',
     cabelo: cam.cor_cabelo || '#333333',
-    calca: cam.cor_calca || '#ffffff'
+    calca: cam.cor_calca || '#1a1a1a',
+    sapato: cam.cor_sapato || '#ffffff'
   };
 
   applyTshirtTexture(model, textures, configs, cam.cor_base);
@@ -256,9 +258,8 @@ async function createAdminViewer(el, cam) {
     controls.dampingFactor = 0.1;
     controls.target.set(0, 1.2, 0); 
     controls.enablePan = false;
-    controls.enableZoom = false; // Scroll é usado para a textura
+    controls.enableZoom = false; 
     
-    // Configura o mouse: Esquerdo arrasta textura, Direito rotaciona câmera
     controls.mouseButtons = {
       LEFT: null, 
       MIDDLE: null,
@@ -270,41 +271,40 @@ async function createAdminViewer(el, cam) {
     let isDraggingTexture = false;
     let previousMousePosition = { x: 0, y: 0 };
     
-    // Guarda as malhas da frente e de trás
-    let meshFrente = null;
-    let meshCostas = null;
+    let meshFrente = null, meshCostas = null, meshManga = null, meshGola = null;
     
     model.traverse(child => {
       if (child.isMesh) {
         const nome = child.name.toLowerCase();
         if (nome.includes('body_front')) meshFrente = child;
         if (nome.includes('body_back')) meshCostas = child;
+        if (nome.includes('sleeves')) meshManga = child;
+        if (nome.includes('ribbing') || nome.includes('gola')) meshGola = child;
       }
     });
 
     const domElement = renderer.domElement;
     
-    // Identifica qual face está sendo clicada (Frente ou Costas)
     function getTargetFace(event) {
       const rect = domElement.getBoundingClientRect();
       mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-      
       raycaster.setFromCamera(mouse, camera);
       
-      const intersects = raycaster.intersectObjects([meshFrente, meshCostas], true);
+      const intersects = raycaster.intersectObjects([meshFrente, meshCostas, meshManga, meshGola], true);
       if (intersects.length > 0) {
         const hit = intersects[0].object;
         const nome = hit.name.toLowerCase();
-        if (nome.includes('body_front')) return { mesh: meshFrente, type: 'frente' };
-        if (nome.includes('body_back')) return { mesh: meshCostas, type: 'costas' };
+        if (nome.includes('body_front')) return { type: 'frente' };
+        if (nome.includes('body_back')) return { type: 'costas' };
+        if (nome.includes('sleeves')) return { type: 'manga' };
+        if (nome.includes('ribbing') || nome.includes('gola')) return { type: 'gola' };
       }
       return null;
     }
 
-    // Evento de clique para arrastar
     domElement.addEventListener('mousedown', (e) => {
-      if (e.button === 0) { // Botão Esquerdo
+      if (e.button === 0) { 
         const target = getTargetFace(e);
         if (target) {
           isDraggingTexture = true;
@@ -318,9 +318,9 @@ async function createAdminViewer(el, cam) {
       if (isDraggingTexture) {
         const target = getTargetFace(e);
         if (target) {
-          const type = target.type; // 'frente' ou 'costas'
-          const tex = type === 'frente' ? textures.frente : textures.costas;
-          const cfg = type === 'frente' ? configs.frente : configs.costas;
+          const type = target.type;
+          const tex = textures[type];
+          const cfg = configs[type];
 
           if (tex) {
             const deltaX = (e.clientX - previousMousePosition.x) / w;
@@ -341,30 +341,33 @@ async function createAdminViewer(el, cam) {
       domElement.style.cursor = 'default';
     });
 
-    // Evento de scroll para Zoom na textura
     domElement.addEventListener('wheel', (e) => {
       const target = getTargetFace(e);
       if (target) {
-        e.preventDefault(); // Impede a rolagem da página
-        const type = target.type; // 'frente' ou 'costas'
-        const tex = type === 'frente' ? textures.frente : textures.costas;
-        const cfg = type === 'frente' ? configs.frente : configs.costas;
+        e.preventDefault(); 
+        const type = target.type;
+        const tex = textures[type];
+        const cfg = configs[type];
 
         if (tex) {
           const zoomFactor = 0.05;
           if (e.deltaY < 0) {
-            cfg.scale += zoomFactor; // Zoom in
+            cfg.scale += zoomFactor;
           } else {
-            cfg.scale -= zoomFactor; // Zoom out
+            cfg.scale -= zoomFactor;
           }
-          cfg.scale = Math.max(0.1, Math.min(5, cfg.scale)); // Limites
+          cfg.scale = Math.max(0.1, Math.min(5, cfg.scale));
           
-          tex.repeat.set(0.6 * cfg.scale, 0.6 * cfg.scale);
+          // Calcula o baseSize correto dependendo da parte
+          let bSize = 0.6;
+          if(type === 'manga') bSize = 0.2;
+          if(type === 'gola') bSize = 0.15;
+
+          tex.repeat.set(bSize * cfg.scale, bSize * cfg.scale);
         }
       }
     });
 
-    // Desabilita o menu de contexto ao clicar com o botão direito
     domElement.addEventListener('contextmenu', e => e.preventDefault());
 
     let animId;
@@ -387,16 +390,10 @@ async function createAdminViewer(el, cam) {
     return {
       scene, camera, renderer, wrapper, controls, model, textures, configs, mannequinColors,
       setTextures(f, c, m, g, cfgs, corBase) {
-        if(f) {
-          textures.frente = f;
-          configs.frente.x = 0; configs.frente.y = 0; configs.frente.scale = 1;
-        }
-        if(c) {
-          textures.costas = c;
-          configs.costas.x = 0; configs.costas.y = 0; configs.costas.scale = 1;
-        }
-        if(m) textures.manga = m;
-        if(g) textures.gola = g;
+        if(f) { textures.frente = f; configs.frente.x = 0; configs.frente.y = 0; configs.frente.scale = 1; }
+        if(c) { textures.costas = c; configs.costas.x = 0; configs.costas.y = 0; configs.costas.scale = 1; }
+        if(m) { textures.manga = m; configs.manga.x = 0; configs.manga.y = 0; configs.manga.scale = 1; }
+        if(g) { textures.gola = g; configs.gola.x = 0; configs.gola.y = 0; configs.gola.scale = 1; }
         
         Object.assign(configs, cfgs);
         applyTshirtTexture(model, textures, configs, corBase);
@@ -438,9 +435,9 @@ async function initApp() {
     if(state.camisetas[2]) { document.getElementById('nome-3').textContent = state.camisetas[2].nome; document.getElementById('desc-3').textContent = state.camisetas[2].descricao; }
   } else {
     state.camisetas = [
-      { id: 1, nome: 'Classic Black', descricao: 'Algodão premium penteado 30.1. Design minimalista que combina com tudo.', cor_base: '#111111', cor_corpo: '#e0e0e0', cor_calca: '#1a1a1a' },
-      { id: 2, nome: 'Urban White', descricao: 'Modelagem oversized com toque suave. Peça-chave do guarda-roupa.', cor_base: '#f5f5f5', cor_corpo: '#d4d4d4', cor_calca: '#2a2a2a' },
-      { id: 3, nome: 'Gold Edition', descricao: 'Edição limitada com acabamento exclusivo. Detalhes em dourado.', cor_base: '#d4af37', cor_corpo: '#c0c0c0', cor_calca: '#000000' }
+      { id: 1, nome: 'Classic Black', descricao: 'Algodão premium penteado 30.1.', cor_base: '#111111', cor_corpo: '#e0e0e0', cor_calca: '#1a1a1a' },
+      { id: 2, nome: 'Urban White', descricao: 'Modelagem oversized com toque suave.', cor_base: '#f5f5f5', cor_corpo: '#d4d4d4', cor_calca: '#2a2a2a' },
+      { id: 3, nome: 'Gold Edition', descricao: 'Edição limitada com detalhes em dourado.', cor_base: '#d4af37', cor_corpo: '#c0c0c0', cor_calca: '#000000' }
     ];
   }
 
@@ -491,7 +488,6 @@ async function initApp() {
   }
   updateCamera();
 
-  // Animações do Scroll
   ScrollTrigger.create({ trigger: "#s2", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
     const p = self.progress;
     camState.z = THREE.MathUtils.lerp(3.8, 2.0, p); 
@@ -558,7 +554,7 @@ async function initApp() {
 }
 
 // ==========================================
-// PAINEL ADMINISTRATIVO (COM CONTROLES INTERATIVOS)
+// PAINEL ADMINISTRATIVO (COM CONTROLES INTERATIVOS E BASE64)
 // ==========================================
 function initAdmin() {
   const ADMIN = { logado: false, abaAtiva: 'config', previewViewer: null };
@@ -662,8 +658,19 @@ function initAdmin() {
   }
   
   // ==========================================
-  // EDIÇÃO INTERATIVA (MOUSE)
+  // EDIÇÃO INTERATIVA (MOUSE) E CONVERSÃO BASE64
   // ==========================================
+  
+  // Função para converter imagem para Base64
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = error => reject(error);
+    });
+  }
+
   function editCamisetaTexturas(id) {
     const c = window.__state.camisetas.find(x => String(x.id) === String(id));
     const content = document.getElementById('adminContent');
@@ -675,8 +682,8 @@ function initAdmin() {
         <div style="font-size: 24px;">🖱️</div>
         <div style="flex:1; font-size:0.9rem; line-height:1.4;">
           <strong style="color:var(--accent);">Controles Interativos:</strong><br>
-          <b>Botão Esquerdo (Arrastar):</b> Move a textura da face clicada (Frente ou Costas).<br>
-          <b>Scroll do Mouse (na camisa):</b> Aumenta/Diminui o zoom da textura.<br>
+          <b>Botão Esquerdo (Arrastar):</b> Move a textura da parte clicada.<br>
+          <b>Scroll do Mouse (na peça):</b> Aumenta/Diminui o zoom.<br>
           <b>Botão Direito (Arrastar):</b> Gira o manequim.
         </div>
       </div>
@@ -684,24 +691,43 @@ function initAdmin() {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
         
         <div class="admin-form">
+          
+          <!-- TEXTURA FRENTE -->
           <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
             <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Textura Frente</h3>
-            <div><label>URL da Imagem</label><input type="text" id="urlFrente" value="${c.textura_principal || ''}" placeholder="https://..."></div>
-            <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileFrente"></div>
+            <div><label>URL da Imagem (ou Base64)</label><input type="text" id="urlFrente" value="${c.textura_principal || ''}" placeholder="https://..."></div>
+            <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileFrente" accept="image/*"></div>
           </div>
 
+          <!-- TEXTURA COSTAS -->
           <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
             <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Textura Costas</h3>
-            <div><label>URL da Imagem</label><input type="text" id="urlCostas" value="${c.textura_costas || ''}" placeholder="https://..."></div>
-            <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileCostas"></div>
+            <div><label>URL da Imagem (ou Base64)</label><input type="text" id="urlCostas" value="${c.textura_costas || ''}" placeholder="https://..."></div>
+            <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileCostas" accept="image/*"></div>
           </div>
 
+          <!-- TEXTURA MANGA -->
+          <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+            <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Textura Mangas</h3>
+            <div><label>URL da Imagem (ou Base64)</label><input type="text" id="urlManga" value="${c.textura_manga || ''}" placeholder="https://..."></div>
+            <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileManga" accept="image/*"></div>
+          </div>
+
+          <!-- TEXTURA GOLA -->
+          <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+            <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Textura Gola</h3>
+            <div><label>URL da Imagem (ou Base64)</label><input type="text" id="urlGola" value="${c.textura_gola || ''}" placeholder="https://..."></div>
+            <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileGola" accept="image/*"></div>
+          </div>
+
+          <!-- CORES DO MANEQUIM -->
           <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
             <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Cores do Manequim</h3>
             <div style="display:flex; gap:8px; margin-bottom:8px;">
               <div style="flex:1"><label>Corpo</label><input type="color" id="corCorpo" value="${c.cor_corpo || '#e0e0e0'}" style="height:40px; padding:4px; cursor:pointer;"></div>
               <div style="flex:1"><label>Cabelo</label><input type="color" id="corCabelo" value="${c.cor_cabelo || '#333333'}" style="height:40px; padding:4px; cursor:pointer;"></div>
               <div style="flex:1"><label>Calça</label><input type="color" id="corCalca" value="${c.cor_calca || '#1a1a1a'}" style="height:40px; padding:4px; cursor:pointer;"></div>
+              <div style="flex:1"><label>Sapato</label><input type="color" id="corSapato" value="${c.cor_sapato || '#ffffff'}" style="height:40px; padding:4px; cursor:pointer;"></div>
             </div>
             <div><label>Cor Base (Fundo se não tiver textura)</label><input type="color" id="corBase" value="${c.cor_base || '#ffffff'}" style="height:40px; padding:4px; cursor:pointer; width:100%"></div>
           </div>
@@ -725,12 +751,13 @@ function initAdmin() {
       if(!ADMIN.previewViewer) return;
 
       // Cores em tempo real
-      ['corCorpo', 'corCabelo', 'corCalca'].forEach(id => {
+      ['corCorpo', 'corCabelo', 'corCalca', 'corSapato'].forEach(id => {
         document.getElementById(id).oninput = () => {
           ADMIN.previewViewer.setColors({
             corpo: document.getElementById('corCorpo').value,
             cabelo: document.getElementById('corCabelo').value,
-            calca: document.getElementById('corCalca').value
+            calca: document.getElementById('corCalca').value,
+            sapato: document.getElementById('corSapato').value
           });
         };
       });
@@ -739,58 +766,65 @@ function initAdmin() {
         ADMIN.previewViewer.setTextures(null, null, null, null, ADMIN.previewViewer.configs, document.getElementById('corBase').value);
       };
 
-      // Uploads
-      document.getElementById('fileFrente').onchange = (e) => {
+      // Uploads com Base64 (Resolve o problema do blob)
+      const handleUpload = async (e, inputId, textureKey) => {
         const file = e.target.files[0];
         if (file) {
-          const url = URL.createObjectURL(file);
-          document.getElementById('urlFrente').value = url;
-          window.__loadTexture(url, c.cor_base).then(t => {
-            ADMIN.previewViewer.setTextures(t, null, null, null, ADMIN.previewViewer.configs, document.getElementById('corBase').value);
+          const base64 = await fileToBase64(file);
+          document.getElementById(inputId).value = base64; // Salva o Base64 no input
+          
+          window.__loadTexture(base64, c.cor_base).then(t => {
+            const args = { frente: [t, null, null, null], costas: [null, t, null, null], manga: [null, null, t, null], gola: [null, null, null, t] }[textureKey];
+            ADMIN.previewViewer.setTextures(...args, ADMIN.previewViewer.configs, document.getElementById('corBase').value);
           });
         }
       };
 
-      document.getElementById('fileCostas').onchange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-          const url = URL.createObjectURL(file);
-          document.getElementById('urlCostas').value = url;
-          window.__loadTexture(url, c.cor_base).then(t => {
-            ADMIN.previewViewer.setTextures(null, t, null, null, ADMIN.previewViewer.configs, document.getElementById('corBase').value);
-          });
-        }
-      };
+      document.getElementById('fileFrente').onchange = (e) => handleUpload(e, 'urlFrente', 'frente');
+      document.getElementById('fileCostas').onchange = (e) => handleUpload(e, 'urlCostas', 'costas');
+      document.getElementById('fileManga').onchange = (e) => handleUpload(e, 'urlManga', 'manga');
+      document.getElementById('fileGola').onchange = (e) => handleUpload(e, 'urlGola', 'gola');
 
       // URLs
-      document.getElementById('urlFrente').onchange = (e) => {
+      const handleUrl = (e, textureKey) => {
         window.__loadTexture(e.target.value, c.cor_base).then(t => {
-          ADMIN.previewViewer.setTextures(t, null, null, null, ADMIN.previewViewer.configs, document.getElementById('corBase').value);
+          const args = { frente: [t, null, null, null], costas: [null, t, null, null], manga: [null, null, t, null], gola: [null, null, null, t] }[textureKey];
+          ADMIN.previewViewer.setTextures(...args, ADMIN.previewViewer.configs, document.getElementById('corBase').value);
         });
       };
-      document.getElementById('urlCostas').onchange = (e) => {
-        window.__loadTexture(e.target.value, c.cor_base).then(t => {
-          ADMIN.previewViewer.setTextures(null, t, null, null, ADMIN.previewViewer.configs, document.getElementById('corBase').value);
-        });
-      };
+      document.getElementById('urlFrente').onchange = (e) => handleUrl(e, 'frente');
+      document.getElementById('urlCostas').onchange = (e) => handleUrl(e, 'costas');
+      document.getElementById('urlManga').onchange = (e) => handleUrl(e, 'manga');
+      document.getElementById('urlGola').onchange = (e) => handleUrl(e, 'gola');
 
-      // Salvar (Agora salva Frente e Costas independentemente)
+      // Salvar
       document.getElementById('saveCamisetaBtn').onclick = async () => {
         const cfgFrente = ADMIN.previewViewer.getConfigs().frente;
         const cfgCostas = ADMIN.previewViewer.getConfigs().costas;
+        const cfgManga = ADMIN.previewViewer.getConfigs().manga;
+        const cfgGola = ADMIN.previewViewer.getConfigs().gola;
         
         const dados = {
           textura_principal: document.getElementById('urlFrente').value,
           textura_costas: document.getElementById('urlCostas').value,
+          textura_manga: document.getElementById('urlManga').value,
+          textura_gola: document.getElementById('urlGola').value,
           x_frente: cfgFrente.x,
           y_frente: cfgFrente.y,
           scale_frente: cfgFrente.scale,
           x_costas: cfgCostas.x,
           y_costas: cfgCostas.y,
           scale_costas: cfgCostas.scale,
+          x_manga: cfgManga.x,
+          y_manga: cfgManga.y,
+          scale_manga: cfgManga.scale,
+          x_gola: cfgGola.x,
+          y_gola: cfgGola.y,
+          scale_gola: cfgGola.scale,
           cor_corpo: document.getElementById('corCorpo').value,
           cor_cabelo: document.getElementById('corCabelo').value,
           cor_calca: document.getElementById('corCalca').value,
+          cor_sapato: document.getElementById('corSapato').value,
           cor_base: document.getElementById('corBase').value
         };
         const r = await window.__apiPost({ action:'updateCamiseta', senha:getSenha(), id: c.id, dados });
