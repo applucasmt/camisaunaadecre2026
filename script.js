@@ -177,7 +177,9 @@ async function createViewer(el, cam, options = {}) {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 1000);
-  camera.position.set(0, 1.2, 2.2);
+  
+  // Ajuste no enquadramento dos cards (mais alto para focar da cabeça para baixo)
+  camera.position.set(0, 1.6, 2.2);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
@@ -197,7 +199,8 @@ async function createViewer(el, cam, options = {}) {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-    controls.target.set(0, 1.3, 0);
+    // Alvo ajustado para focar no peito/cabeça
+    controls.target.set(0, 1.6, 0); 
     controls.minDistance = 0.1;
     controls.maxDistance = Infinity;
     controls.enablePan = false;
@@ -285,7 +288,7 @@ async function createViewer(el, cam, options = {}) {
       setAutoRotate(v) { controls.autoRotate = v; if (!v) pauseUntil = Infinity; else pauseUntil = 0; },
       zoomIn() { controls.dollyIn(1.2); controls.update(); },
       zoomOut() { controls.dollyOut(1.2); controls.update(); },
-      resetCamera() { camera.position.set(0, 1.2, 2.2); controls.target.set(0, 1.3, 0); controls.update(); },
+      resetCamera() { camera.position.set(0, 1.6, 2.2); controls.target.set(0, 1.6, 0); controls.update(); },
       destroy() { cancelAnimationFrame(animId); ro.disconnect(); controls.dispose(); renderer.dispose(); el.innerHTML = ''; }
     };
 
@@ -297,7 +300,7 @@ async function createViewer(el, cam, options = {}) {
 }
 window.__createViewer = createViewer;
 
-// ============ HERO VIEWER (SLIDER LATERAL) ============
+// ============ HERO VIEWER (SLIDER LATERAL - CABEÇA NO TOPO) ============
 async function initHeroViewer() {
   const el = document.getElementById('heroViewer');
   if (!el || state.camisetas.length === 0) return;
@@ -308,8 +311,8 @@ async function initHeroViewer() {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
   
-  // Câmera fixa olhando para o centro
-  camera.position.set(0, 1.15, 3.5); 
+  // Câmera mais alta e com o alvo no topo para pegar da cabeça para baixo
+  camera.position.set(0, 1.6, 3.2); 
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
@@ -326,23 +329,17 @@ async function initHeroViewer() {
 
   const wrappers = [];
   const totalModels = Math.min(3, state.camisetas.length);
-  
-  // Distância entre cada manequim
   const spacing = 2.2; 
 
   for (let i = 0; i < totalModels; i++) {
     const { wrapper } = await buildMannequin(state.camisetas[i]);
-    
-    // Posiciona lado a lado (Esquerda, Centro, Direita)
     wrapper.position.x = (i - 1) * spacing; 
-    wrapper.position.y = -0.3;
-    
+    wrapper.position.y = -0.3; // Mantém no chão
     scene.add(wrapper);
     wrappers.push(wrapper);
   }
 
   let currentIndex = 0;
-  // Fases: 'turning_back' -> 'pausing_back' -> 'turning_front' -> 'pausing_front' -> 'sliding'
   let statePhase = 'turning_back'; 
   let phaseTimer = 0;
   
@@ -371,17 +368,11 @@ async function initHeroViewer() {
     else if (statePhase === 'pausing_front') {
       if (phaseTimer > 1.0) { 
         statePhase = 'sliding';
-        
-        // Calcula a próxima posição da câmera
         const nextIndex = (currentIndex + 1) % totalModels;
-        
-        // Truque do Slider: Se o próximo for o 0, ele está lá na esquerda.
-        // Para não voltar tudo de uma vez, a gente teletransporta a câmera para o final e desliza para o 0.
         if (nextIndex === 0) {
-           // Quando volta pro começo, reseta os modelos para as posições iniciais instantaneamente
            wrappers.forEach((w, i) => { w.position.x = (i - 1) * spacing; });
-           currentCameraX = (totalModels - 1) * spacing; // Coloca câmera no final
-           targetCameraX = 0; // Desliza de volta pro centro
+           currentCameraX = (totalModels - 1) * spacing;
+           targetCameraX = 0;
         } else {
            targetCameraX = (nextIndex - 1) * spacing;
         }
@@ -400,16 +391,16 @@ async function initHeroViewer() {
       }
     }
 
-    // Move a câmera e o alvo dela
+    // Movimentação horizontal da câmera (Slider)
     camera.position.x = currentCameraX;
-    camera.lookAt(currentCameraX, 1.15, 0);
+    camera.position.y = 1.6; // Fixa a altura da câmera na altura da cabeça
+    camera.lookAt(currentCameraX, 1.6, 0); // Aponta para a altura da cabeça
     
-    // Aplica o giro individual no modelo ativo
     wrappers.forEach((w, i) => {
       if (i === currentIndex) {
         w.rotation.y = extraSpinAngle;
       } else {
-        w.rotation.y = 0; // Os outros sempre de frente
+        w.rotation.y = 0;
       }
     });
 
