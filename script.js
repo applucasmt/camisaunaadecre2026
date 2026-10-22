@@ -313,7 +313,7 @@ async function initHeroViewer() {
   const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
   
   // Câmera puxada para trás (4.0) para caber o manequim e mostrar da cabeça para baixo
-  camera.position.set(0, 4.0, 1.0); 
+  camera.position.set(0, 0.5, 1.0); 
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
