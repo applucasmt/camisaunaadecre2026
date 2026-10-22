@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
+// ⚠️ COLE AQUI A URL DO SEU WEB APP DO GOOGLE APPS SCRIPT
 const API_URL = 'https://script.google.com/macros/s/AKfycbxnUijRFoBQZqxjPNtcjercaHiO5oIxmMViYEC4tC_DLgxApjOjTw9WCU4Fb8NSJKf7/exec';
 
 const state = { config: {}, camisetas: [], heroViewer: null, productViewers: {}, modalViewer: null };
@@ -25,8 +26,22 @@ async function apiPost(payload) {
 }
 window.__apiPost = apiPost;
 
+// ============ CORREÇÃO DO CORS DO DRIVE ============
+function fixDriveUrl(url) {
+  if (!url) return url;
+  // O Google Drive bloqueia CORS. O Googleusercontent permite exibir em sites.
+  if (url.includes('drive.google.com')) {
+    const match = url.match(/id=([a-zA-Z0-9_-]+)/) || url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      return `https://lh3.googleusercontent.com/d/${match[1]}`;
+    }
+  }
+  return url;
+}
+
 async function loadTexture(url, fallbackColor) {
-  if (!url) {
+  const finalUrl = fixDriveUrl(url);
+  if (!finalUrl) {
     const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 512;
     const ctx = canvas.getContext('2d'); ctx.fillStyle = fallbackColor || '#333'; ctx.fillRect(0,0,512,512);
     return new THREE.CanvasTexture(canvas);
@@ -34,7 +49,11 @@ async function loadTexture(url, fallbackColor) {
   return new Promise(resolve => {
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin('anonymous');
-    loader.load(url, t => { t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; resolve(t); }, undefined, () => resolve(loadTexture(null, fallbackColor)));
+    loader.load(finalUrl, 
+      t => { t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; resolve(t); }, 
+      undefined, 
+      () => resolve(loadTexture(null, fallbackColor))
+    );
   });
 }
 window.__loadTexture = loadTexture;
@@ -44,21 +63,37 @@ async function loadAvatarModel() {
   if (gltfCache) return gltfCache;
   const loader = new GLTFLoader();
   return new Promise((resolve, reject) => {
-    loader.load('./camisa.glb', (gltf) => { gltfCache = gltf.scene; resolve(gltfCache); }, undefined, reject);
+    // Ao carregar, removemos o erro de texturas não encontradas
+    loader.load('./camisa.glb', (gltf) => { 
+      gltfCache = gltf.scene; 
+      resolve(gltfCache); 
+    }, undefined, reject);
   });
 }
 
-// ============ APLICAR TEXTURA ============
-function applyTshirtTexture(root, frontTex, backTex, scale = 1.0, offsetX = 0, offsetY = 0) {
+// ============ APLICAR TEXTURA E CORRIGIR ERROS ============
+function applyTshirtTexture(root, frontTex, backTex, baseColor, scale = 1.0, offsetX = 0, offsetY = 0) {
   root.traverse((child) => {
     if (child.isMesh) {
       const nome = child.name.toLowerCase();
       const isFront = nome.includes('body_front') || nome.includes('sleeves') || nome.includes('ribbing');
       const isBack = nome.includes('body_back');
-      
+      const isBody = nome.includes('body'); // Resto do corpo
+      const isPants = nome.includes('jeans') || nome.includes('pants');
+
+      // 1. Corrige erro 404 das texturas do GLB
+      if (child.material) {
+        if (Array.isArray(child.material)) {
+          child.material.forEach(m => { if(m.map) m.map = null; });
+        } else {
+          child.material.map = null;
+        }
+      }
+
+      // 2. Aplica Cor Base se não houver textura customizada
       if (isFront || isBack) {
         child.material = child.material.clone();
-        child.material.color.setHex(0xffffff);
+        child.material.color.set(baseColor || 0xffffff);
         child.material.metalness = 0.0;
         child.material.roughness = 0.8;
 
@@ -69,7 +104,13 @@ function applyTshirtTexture(root, frontTex, backTex, scale = 1.0, offsetX = 0, o
           tex.repeat.set(scale, scale);
           tex.offset.set(offsetX, offsetY);
           child.material.map = tex;
+          child.material.color.setHex(0xffffff); // Se tem textura, cor branca
         }
+        child.material.needsUpdate = true;
+      } 
+      else if (isBody || isPants) {
+        // Mantém o corpo e a calça, mas limpa possíveis texturas quebradas
+        child.material = child.material.clone();
         child.material.needsUpdate = true;
       }
     }
@@ -84,8 +125,6 @@ async function createViewer(el, cam, options = {}) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x151515); 
   const camera = new THREE.PerspectiveCamera(45, w/h, 0.1, 1000);
-  
-  // Câmera fixa apontando para o centro do modelo
   camera.position.set(0, 1.2, 3.5);
 
   const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
@@ -104,58 +143,49 @@ async function createViewer(el, cam, options = {}) {
     const originalModel = await loadAvatarModel();
     const model = originalModel.clone(true);
     
-    // 1. LIMPEZA AGRESSIVA: Remove malhas muito grandes ou muito pequenas (caixas de colisão)
+    // Limpeza cirúrgica de caixas brancas
     const toRemove = [];
     model.traverse((child) => {
       if (child.isMesh) {
         const nome = child.name.toLowerCase();
-        // Mantém apenas o que é camisa, calça ou corpo
         const keep = nome.includes('body') || nome.includes('shirt') || nome.includes('sleeves') || nome.includes('jeans') || nome.includes('pants') || nome.includes('ribbing');
-        if (!keep) {
-          toRemove.push(child);
-        }
+        if (!keep) toRemove.push(child);
       }
     });
     toRemove.forEach(m => { m.visible = false; if(m.parent) m.parent.remove(m); });
 
-    // 2. RESET MATEMÁTICO: Força o modelo a ficar no centro e com escala 1
+    // Reset matemático
     model.position.set(0, 0, 0);
     model.rotation.set(0, 0, 0);
     model.scale.set(1, 1, 1);
-    
-    // Atualiza a matriz para garantir que o Three.js leia a nova posição zerada
     model.updateMatrixWorld(true);
 
-    // 3. MEDE O MODELO LIMPO
+    // Medir e reposicionar
     const box = new THREE.Box3().setFromObject(model);
     const sizeY = box.max.y - box.min.y;
-    
-    // 4. FORÇA A ALTURA PARA 2 METROS
     const targetHeight = 2.0;
-    // Se a altura for 0 (deu erro), usa 1 como fallback
     const scaleFactor = sizeY > 0.1 ? (targetHeight / sizeY) : 1;
     
-    // 5. AGRUPA E POSICIONA NO CHÃO
     const wrapper = new THREE.Group();
     wrapper.add(model);
     wrapper.scale.setScalar(scaleFactor);
-    
-    // Coloca os pés no chão (Y=0) e centraliza em X e Z
     wrapper.position.y = -(box.min.y * scaleFactor);
     wrapper.position.x = -(box.getCenter(new THREE.Vector3()).x * scaleFactor);
     wrapper.position.z = -(box.getCenter(new THREE.Vector3()).z * scaleFactor);
 
+    // Carrega texturas
     const frontTex = await loadTexture(cam.textura_principal, cam.cor_base);
     const backTex = await loadTexture(cam.textura_costas, cam.cor_base);
-    applyTshirtTexture(model, frontTex, backTex, cam.textura_escala || 1, cam.textura_offset_x || 0, cam.textura_offset_y || 0);
+    
+    // Aplica texturas e conserta erros 404
+    applyTshirtTexture(model, frontTex, backTex, cam.cor_base, cam.textura_escala || 1, cam.textura_offset_x || 0, cam.textura_offset_y || 0);
 
     scene.add(wrapper);
 
-    // 6. CONTROLES
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-    controls.target.set(0, 1.0, 0); // Foca no peito
+    controls.target.set(0, 1.0, 0); 
     controls.minDistance = 0.1; 
     controls.maxDistance = Infinity; 
     controls.enablePan = false;
@@ -184,7 +214,7 @@ async function createViewer(el, cam, options = {}) {
 
     return {
       scene, camera, renderer, wrapper, controls, model,
-      setTextures(front, back, scale, offX, offY) { applyTshirtTexture(model, front, back, scale, offX, offY); },
+      setTextures(front, back, scale, offX, offY) { applyTshirtTexture(model, front, back, cam.cor_base, scale, offX, offY); },
       setAutoRotate(v) { controls.autoRotate = v; if (!v) pauseUntil = Infinity; else pauseUntil = 0; },
       zoomIn() { controls.dollyIn(1.2); controls.update(); },
       zoomOut() { controls.dollyOut(1.2); controls.update(); },
@@ -204,7 +234,6 @@ async function createViewer(el, cam, options = {}) {
 }
 window.__createViewer = createViewer;
 
-// ============ CARREGAR SITE ============
 async function loadSite() {
   try {
     const data = await apiGet('getAll');
