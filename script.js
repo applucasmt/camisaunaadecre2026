@@ -9,7 +9,7 @@ window.__state = state;
 window.THREE = THREE;
 
 // ==========================================
-// HELPERS E CORS
+// HELPERS E CORS CORRIGIDO
 // ==========================================
 function toast(msg, isError = false) {
   let el = document.getElementById('toast') || document.createElement('div');
@@ -30,7 +30,7 @@ async function apiGet(action = 'getAll') {
 
 async function apiPost(payload) {
   try {
-    // SOLUÇÃO CORS: Usar URLSearchParams
+    // SOLUÇÃO CORS: Enviar como form-urlencoded para o Google Apps Script aceitar
     const formData = new URLSearchParams();
     formData.append('payload', JSON.stringify(payload));
 
@@ -222,7 +222,7 @@ async function buildMannequin(cam) {
 }
 
 // ==========================================
-// ADMIN VIEWER (Usado pelo admin.js)
+// EXPORTA O CRIADOR DO PREVIEW PARA O ADMIN.JS
 // ==========================================
 async function createAdminViewer(el, cam) {
   const w = el.clientWidth || 400;
@@ -347,11 +347,9 @@ async function createAdminViewer(el, cam) {
 
         if (tex) {
           const zoomFactor = 0.05;
-          if (e.deltaY < 0) {
-            cfg.scale += zoomFactor;
-          } else {
-            cfg.scale -= zoomFactor;
-          }
+          if (e.deltaY < 0) cfg.scale += zoomFactor;
+          else cfg.scale -= zoomFactor;
+          
           cfg.scale = Math.max(0.1, Math.min(5, cfg.scale));
           
           let bSize = 0.6;
@@ -409,7 +407,7 @@ async function createAdminViewer(el, cam) {
       }
     };
   } catch (error) {
-    el.innerHTML = '<p style="padding:20px;color:#ff4d4d;text-align:center;">⚠️ Erro ao carregar modelo.</p>';
+    el.innerHTML = '<p style="padding:20px;color:#ff4d4d;text-align:center;">⚠️ Erro.</p>';
     return null;
   }
 }
