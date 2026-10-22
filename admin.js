@@ -361,4 +361,55 @@ async function initAdminPreview(cam) {
 
   const tshirtGeo = window.__createTshirtGeometry();
   const tshirtMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, side: THREE.DoubleSide });
-  const tshirt = new THREE.Mesh(tsh
+  const tshirt = new THREE.Mesh(tshirtGeo, tshirtMat);
+  tshirt.scale.set(1.15, 1.15, 1.15);
+  group.add(tshirt);
+
+  scene.add(group);
+
+  const clock = new THREE.Clock();
+  function animate() {
+    if (!ADMIN.previewRenderer) return;
+    requestAnimationFrame(animate);
+    const t = clock.getElapsedTime();
+    group.rotation.y = t * 0.4;
+    group.position.y = Math.sin(t * 1.3) * 0.08;
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  ADMIN.previewRenderer = renderer;
+  ADMIN.previewScene = { scene, camera, renderer, tshirtMat, group };
+
+  new ResizeObserver(() => {
+    const w2 = el.clientWidth, h2 = el.clientHeight;
+    if (!w2 || !h2) return;
+    camera.aspect = w2/h2; camera.updateProjectionMatrix(); renderer.setSize(w2, h2);
+  }).observe(el);
+}
+
+function updatePreviewTexture(tipo, dataUrl) {
+  if (!ADMIN.previewScene) return;
+  const loader = new THREE.TextureLoader();
+  loader.load(dataUrl, (tex) => {
+    tex.anisotropy = 8;
+    if (tipo === 'principal') {
+      ADMIN.previewScene.tshirtMat.map = tex;
+      ADMIN.previewScene.tshirtMat.needsUpdate = true;
+    }
+    // secundária/manga: representação simplificada no preview
+    if (tipo === 'manga') {
+      // cria mangas visuais
+      const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 });
+      const geo = new THREE.BoxGeometry(0.7, 0.6, 0.3);
+      const mL = new THREE.Mesh(geo, mat); mL.position.set(-1.5, 0.9, 0); mL.rotation.z = 0.3;
+      const mR = new THREE.Mesh(geo, mat); mR.position.set(1.5, 0.9, 0); mR.rotation.z = -0.3;
+      ADMIN.previewScene.group.add(mL, mR);
+    }
+  });
+}
+
+// ============ HELPERS ============
+function getSenha() {
+  return window.__state.config.admin_senha || '20266';
+}
