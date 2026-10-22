@@ -1,5 +1,5 @@
 // ⚠️ COLE AQUI a URL do seu Web App
-const API_URL = 'https://script.google.com/macros/s/SEU_ID_AQUI/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbxnUijRFoBQZqxjPNtcjercaHiO5oIxmMViYEC4tC_DLgxApjOjTw9WCU4Fb8NSJKf7/exec';
 
 // ============ MODELO 3D (GLB) ============
 // X Bot do Mixamo — CC, hosted by Three.js (oficial)
