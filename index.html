@@ -18,7 +18,15 @@
 </head>
 <body>
 
-<!-- HEADER SEM O MENU (APENAS LOGO CENTRALIZADA) -->
+<!-- POPUP FLUTUANTE INICIAL -->
+<div class="scroll-popup" id="scrollPopup">
+  <span>Deslize para ver os modelos</span>
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 5v14M19 12l-7 7-7-7"/>
+  </svg>
+</div>
+
+<!-- HEADER MINIMALISTA -->
 <header class="header">
   <div class="logo">ELEGANCE<span>·</span>WEAR</div>
 </header>
@@ -26,7 +34,7 @@
 <!-- CONTAINER DE SCROLL -->
 <div class="scroll-container">
 
-  <!-- CANVAS 3D (FUNDO FIXO) -->
+  <!-- CANVAS 3D -->
   <div class="canvas-wrapper">
     <div id="webgl-container"></div>
     <div class="canvas-overlay"></div>
@@ -37,11 +45,7 @@
     <div class="content-box text-center fade-in">
       <span class="eyebrow">COLEÇÃO 2026</span>
       <h1 id="heroTitle">ELEGANCE<br>WEAR</h1>
-      
-      <!-- NOVA MENSAGEM COM ANIMAÇÃO -->
-      <p class="instruction-text">Deslize para ver os modelos</p>
-      
-      <div class="scroll-hint">Deslize ⌄</div>
+      <!-- Removido o texto antigo, agora é o popup -->
     </div>
   </section>
 
@@ -54,7 +58,7 @@
     </div>
   </section>
 
-  <!-- S3: ROTAÇÃO MODELO 1 (COSTAS) -->
+  <!-- S3: ROTAÇÃO MODELO 1 -->
   <section class="scroll-section" id="s3">
     <div class="content-box align-left fade-in">
       <span class="eyebrow">VISTA TRASEIRA</span>
@@ -101,7 +105,7 @@
 
 </div>
 
-<!-- BOTÃO DO PAINEL ADMIN -->
+<!-- BOTÃO ADMIN -->
 <button class="lock-btn" id="lockBtn" title="Painel Admin">🔒</button>
 
 <!-- MODAL DE LOGIN -->
@@ -118,7 +122,7 @@
   </div>
 </div>
 
-<!-- PAINEL ADMIN -->
+<!-- PAINEL ADMINISTRATIVO -->
 <div class="admin-panel" id="adminPanel">
   <div class="admin-header">
     <h2>🎛️ Painel Administrativo</h2>
