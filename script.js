@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // ⚠️ COLE AQUI A URL DO SEU WEB APP DO GOOGLE APPS SCRIPT
 const API_URL = 'https://script.google.com/macros/s/AKfycbxnUijRFoBQZqxjPNtcjercaHiO5oIxmMViYEC4tC_DLgxApjOjTw9WCU4Fb8NSJKf7/exec';
@@ -33,22 +34,16 @@ async function apiGet(action='getAll') {
   try {
     const r = await fetch(`${API_URL}?action=${action}`);
     return await r.json();
-  } catch (e) {
-    return { ok: false, error: 'Falha na rede' };
-  }
+  } catch (e) { return { ok: false, error: 'Falha na rede' }; }
 }
 
 async function apiPost(payload) {
   try {
     const r = await fetch(API_URL, {
-      method:'POST',
-      headers:{ 'Content-Type':'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
+      method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(payload)
     });
     return await r.json();
-  } catch (e) {
-    return { ok: false, error: 'Falha na rede' };
-  }
+  } catch (e) { return { ok: false, error: 'Falha na rede' }; }
 }
 window.__apiPost = apiPost;
 
@@ -59,10 +54,6 @@ function createProceduralTexture(color) {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = color || '#333333';
   ctx.fillRect(0, 0, 1024, 1024);
-  for (let i = 0; i < 3000; i++) {
-    ctx.fillStyle = `rgba(255,255,255,${Math.random()*0.03})`;
-    ctx.fillRect(Math.random()*1024, Math.random()*1024, 1, 1);
-  }
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -74,147 +65,59 @@ async function loadTexture(url, fallbackColor) {
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin('anonymous');
     loader.load(url,
-      t => { t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace; resolve(t); },
-      undefined,
-      () => resolve(createProceduralTexture(fallbackColor))
+      t => { 
+        t.anisotropy = 8; 
+        t.colorSpace = THREE.SRGBColorSpace; 
+        // Ajuste importante para o mapeamento da estampa não ficar de cabeça para baixo
+        t.flipY = false; 
+        resolve(t); 
+      },
+      undefined, () => resolve(createProceduralTexture(fallbackColor))
     );
   });
 }
 window.__loadTexture = loadTexture;
 
-// ============ MANEQUIM DE VITRINE 3D ============
-async function buildMannequin(cam) {
-  const group = new THREE.Group();
-
-  // Material do manequim (branco brilhante estilo fibra de vidro)
-  const skinMat = new THREE.MeshStandardMaterial({
-    color: 0xe0e0e0, // Cinza claro / Branco
-    roughness: 0.2,  // Bem liso
-    metalness: 0.1
+// ============ CARREGAR MODELO GLB LOCAL ============
+let gltfCache = null;
+async function loadAvatarModel() {
+  if (gltfCache) return gltfCache;
+  const loader = new GLTFLoader();
+  return new Promise((resolve, reject) => {
+    // Carrega o arquivo camisa.glb que está na raiz do projeto
+    loader.load('./camisa.glb', (gltf) => {
+      gltfCache = gltf.scene;
+      resolve(gltfCache);
+    }, undefined, reject);
   });
+}
 
-  // Corpo (tronco com cintura)
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.65, 2.2, 32), skinMat);
-  torso.position.y = 0.3;
-  group.add(torso);
+// ============ APLICAR TEXTURA NA CAMISA ============
+function applyTshirtTexture(root, texture) {
+  root.traverse((child) => {
+    if (child.isMesh) {
+      const nome = child.name.toLowerCase();
+      
+      // Peças que formam a camiseta no seu modelo 3D
+      const partesDaCamisa = [
+        'body_front', 'body_back', 'sleeves', 'sleeves_1', 'ribbing', 'ribbing_1'
+      ];
+      
+      const isCamisa = partesDaCamisa.some(parte => nome.includes(parte));
 
-  // Ombros arredondados
-  const shoulders = new THREE.Mesh(new THREE.SphereGeometry(0.78, 32, 16, 0, Math.PI*2, 0, Math.PI/2), skinMat);
-  shoulders.position.y = 1.4;
-  shoulders.scale.set(1.1, 0.7, 0.8);
-  group.add(shoulders);
-
-  // Pescoço
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.25, 0.6, 32), skinMat);
-  neck.position.y = 1.8;
-  group.add(neck);
-
-  // Cabeça (formato oval de manequim, sem rosto)
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.42, 32, 32), skinMat);
-  head.position.y = 2.4;
-  head.scale.set(0.85, 1.15, 0.9);
-  group.add(head);
-
-  // Braços (posicionados para baixo, colados ao corpo)
-  function makeArm(side) {
-    const armGroup = new THREE.Group();
-    // Braço superior
-    const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.14, 1.0, 24), skinMat);
-    upper.position.y = -0.5;
-    armGroup.add(upper);
-    // Antebraço
-    const fore = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.10, 0.9, 24), skinMat);
-    fore.position.y = -1.4;
-    armGroup.add(fore);
-    // Mão
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), skinMat);
-    hand.position.y = -1.9;
-    hand.scale.set(0.8, 1.4, 0.5);
-    armGroup.add(hand);
-
-    // Posiciona o braço na lateral do ombro e inclina levemente para fora
-    armGroup.position.set(side * 0.85, 1.3, 0);
-    armGroup.rotation.z = side * 0.08;
-    return armGroup;
-  }
-  group.add(makeArm(-1));
-  group.add(makeArm(1));
-
-  // Pernas
-  function makeLeg(side) {
-    const legGroup = new THREE.Group();
-    // Coxa
-    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.20, 1.2, 24), skinMat);
-    thigh.position.y = -0.6;
-    legGroup.add(thigh);
-    // Panturrilha
-    const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.13, 1.1, 24), skinMat);
-    shin.position.y = -1.7;
-    legGroup.add(shin);
-    // Pé (formato de sapato básico)
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, 0.5), skinMat);
-    foot.position.set(0, -2.3, 0.1);
-    legGroup.add(foot);
-
-    legGroup.position.set(side * 0.35, -0.9, 0);
-    return legGroup;
-  }
-  group.add(makeLeg(-1));
-  group.add(makeLeg(1));
-
-  // Base do manequim
-  const baseMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3, metalness: 0.8 });
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.2, 16), baseMat);
-  pole.position.y = -4.5;
-  group.add(pole);
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.7, 0.1, 32), baseMat);
-  base.position.y = -5.1;
-  group.add(base);
-
-  // ===== CAMISETA (Formato de tecido vestindo o corpo) =====
-  const tex = await loadTexture(cam.textura_principal, cam.cor_base || '#fff');
-  
-  // Geometria da camiseta mais ajustada ao corpo (estilo oversized)
-  const tshirtGeo = new THREE.CylinderGeometry(0.81, 0.78, 1.8, 32, 1, true);
-  // Fecha o topo e a base
-  const tshirtMat = new THREE.MeshStandardMaterial({
-    map: tex,
-    color: 0xffffff,
-    roughness: 0.9,
-    metalness: 0.0,
-    side: THREE.DoubleSide
+      if (isCamisa) {
+        // Clona o material para não afetar o original em cache
+        child.material = child.material.clone();
+        child.material.map = texture;
+        
+        // Deixa o material branco para mostrar as cores reais da textura
+        child.material.color.setHex(0xffffff); 
+        child.material.metalness = 0.0;
+        child.material.roughness = 0.8;
+        child.material.needsUpdate = true;
+      }
+    }
   });
-  const tshirt = new THREE.Mesh(tshirtGeo, tshirtMat);
-  tshirt.position.y = 0.5;
-  group.add(tshirt);
-
-  // Mangas da camiseta
-  const sleeveGeo = new THREE.CylinderGeometry(0.2, 0.22, 0.6, 16, 1, true);
-  const sleeveMat = new THREE.MeshStandardMaterial({
-    map: tex,
-    color: 0xffffff,
-    roughness: 0.9,
-    side: THREE.DoubleSide
-  });
-  
-  const sleeveL = new THREE.Mesh(sleeveGeo, sleeveMat);
-  sleeveL.position.set(-0.85, 1.1, 0);
-  sleeveL.rotation.z = 0.15;
-  group.add(sleeveL);
-  
-  const sleeveR = new THREE.Mesh(sleeveGeo, sleeveMat);
-  sleeveR.position.set(0.85, 1.1, 0);
-  sleeveR.rotation.z = -0.15;
-  group.add(sleeveR);
-
-  // Gola da camiseta
-  const collarGeo = new THREE.TorusGeometry(0.24, 0.04, 16, 32);
-  const collar = new THREE.Mesh(collarGeo, tshirtMat);
-  collar.position.y = 1.4;
-  collar.rotation.x = Math.PI / 2;
-  group.add(collar);
-
-  return { group, tshirtMat };
 }
 
 // ============ CRIAR VIEWER ============
@@ -224,7 +127,7 @@ async function createViewer(el, cam, options = {}) {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(35, w/h, 0.1, 200);
-  camera.position.set(0, 0.5, 9);
+  camera.position.set(0, 1.0, 5); // Câmera ajustada para o modelo
 
   const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
   renderer.setSize(w, h);
@@ -232,80 +135,80 @@ async function createViewer(el, cam, options = {}) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   el.appendChild(renderer.domElement);
 
-  // Luzes de Estúdio de Vitrine
-  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-  
-  const key = new THREE.DirectionalLight(0xffffff, 2.0); 
-  key.position.set(3, 5, 5); 
-  scene.add(key);
-  
-  const fill = new THREE.DirectionalLight(0xffffff, 1.0); 
-  fill.position.set(-4, 2, 3); 
-  scene.add(fill);
-  
-  const rim = new THREE.DirectionalLight(0xd4af37, 1.5); 
-  rim.position.set(0, -2, -4); 
-  scene.add(rim);
+  // Iluminação de Estúdio
+  scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+  const key = new THREE.DirectionalLight(0xffffff, 2.5); key.position.set(2, 5, 4); scene.add(key);
+  const fill = new THREE.DirectionalLight(0xffffff, 1.0); fill.position.set(-4, 3, 2); scene.add(fill);
+  const rim = new THREE.DirectionalLight(0xd4af37, 1.5); rim.position.set(0, 2, -5); scene.add(rim);
 
-  const { group, tshirtMat } = await buildMannequin(cam);
-  group.position.y = 0.8; // Centraliza na tela
-  scene.add(group);
+  try {
+    const originalModel = await loadAvatarModel();
+    const model = originalModel.clone(true);
+    
+    // === AJUSTE DE POSIÇÃO DO MODELO ===
+    // Se o modelo ficar "flutuando" ou muito baixo, altere o -1.2
+    model.position.y = -1.2; 
+    model.scale.set(1.0, 1.0, 1.0); // Se ficar muito grande, diminua para 0.8
 
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.08;
-  controls.target.set(0, 0.8, 0);
-  controls.enablePan = false; // Foca no manequim
-  controls.minDistance = 3;
-  controls.maxDistance = 12;
-  controls.autoRotate = options.autoRotate !== false;
-  controls.autoRotateSpeed = 1.5;
+    const tex = await loadTexture(cam.textura_principal, cam.cor_base);
+    applyTshirtTexture(model, tex);
 
-  let pauseUntil = 0;
-  const onInteract = () => { pauseUntil = performance.now() + 2500; };
-  renderer.domElement.addEventListener('pointerdown', onInteract);
-  renderer.domElement.addEventListener('touchstart', onInteract, { passive: true });
+    scene.add(model);
 
-  const clock = new THREE.Clock();
-  let animId;
-  function animate() {
-    animId = requestAnimationFrame(animate);
-    controls.autoRotate = (performance.now() > pauseUntil) && (options.autoRotate !== false);
-    controls.update();
-    // Leve respiração
-    group.position.y = 0.8 + Math.sin(clock.getElapsedTime() * 0.8) * 0.02;
-    renderer.render(scene, camera);
-  }
-  animate();
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, 1.0, 0); // Foca no peito
+    controls.enablePan = false;
+    controls.minDistance = 2;
+    controls.maxDistance = 10;
+    controls.autoRotate = options.autoRotate !== false;
+    controls.autoRotateSpeed = 1.5;
 
-  const ro = new ResizeObserver(() => {
-    const w2 = el.clientWidth, h2 = el.clientHeight;
-    if (!w2 || !h2) return;
-    camera.aspect = w2/h2;
-    camera.updateProjectionMatrix();
-    renderer.setSize(w2, h2);
-  });
-  ro.observe(el);
+    let pauseUntil = 0;
+    const onInteract = () => { pauseUntil = performance.now() + 2500; };
+    renderer.domElement.addEventListener('pointerdown', onInteract);
 
-  return {
-    scene, camera, renderer, group, controls, tshirtMat,
-    setAutoRotate(v) { controls.autoRotate = v; if (!v) pauseUntil = Infinity; else pauseUntil = 0; },
-    setTexture(texture) { 
-      tshirtMat.map = texture; 
-      tshirtMat.needsUpdate = true; 
-    },
-    resetCamera() {
-      camera.position.set(0, 0.5, 9);
-      controls.target.set(0, 0.8, 0);
+    let animId;
+    function animate() {
+      animId = requestAnimationFrame(animate);
+      controls.autoRotate = (performance.now() > pauseUntil) && (options.autoRotate !== false);
       controls.update();
-    },
-    destroy() {
-      cancelAnimationFrame(animId);
-      ro.disconnect();
-      renderer.dispose();
-      el.innerHTML = '';
+      renderer.render(scene, camera);
     }
-  };
+    animate();
+
+    const ro = new ResizeObserver(() => {
+      const w2 = el.clientWidth, h2 = el.clientHeight;
+      if (!w2 || !h2) return;
+      camera.aspect = w2/h2;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w2, h2);
+    });
+    ro.observe(el);
+
+    return {
+      scene, camera, renderer, model, controls,
+      setTexture(texture) { applyTshirtTexture(model, texture); },
+      setAutoRotate(v) { controls.autoRotate = v; if (!v) pauseUntil = Infinity; else pauseUntil = 0; },
+      resetCamera() {
+        camera.position.set(0, 1.0, 5);
+        controls.target.set(0, 1.0, 0);
+        controls.update();
+      },
+      destroy() {
+        cancelAnimationFrame(animId);
+        ro.disconnect();
+        renderer.dispose();
+        el.innerHTML = '';
+      }
+    };
+
+  } catch (error) {
+    console.error('Falha ao carregar o modelo 3D. Verifique se camisa.glb está na raiz.', error);
+    el.innerHTML = '<p style="padding:20px;color:#ff4d4d;font-size:.9rem;text-align:center;">⚠️ Erro ao carregar.<br>O arquivo <b>camisa.glb</b> não foi encontrado na raiz.</p>';
+    return null;
+  }
 }
 window.__createViewer = createViewer;
 
@@ -314,7 +217,6 @@ async function loadSite() {
   try {
     const data = await apiGet('getAll');
     if (!data.ok) throw new Error(data.error);
-    
     state.config = Object.fromEntries(data.config.map(c => [c.CHAVE, c.VALOR]));
     state.camisetas = data.camisetas;
     
@@ -326,9 +228,9 @@ async function loadSite() {
   } catch (e) {
     console.error(e);
     toast('Erro ao carregar dados.', true);
-    // Fallback (Para ver o design funcionando caso a API caia)
+    // Fallback para não quebrar a tela se a API falhar
     state.camisetas = [
-      { id: 1, nome: 'Classic Black', descricao: 'Algodão premium penteado', cor_base: '#111111', destaque: 'Silhueta atemporal' },
+      { id: 1, nome: 'Classic Black', descricao: 'Algodão premium', cor_base: '#111111', destaque: 'Silhueta atemporal' },
       { id: 2, nome: 'Urban White', descricao: 'Modelagem oversized', cor_base: '#f5f5f5', destaque: 'Minimalismo urbano' },
       { id: 3, nome: 'Gold Edition', descricao: 'Edição limitada', cor_base: '#d4af37', destaque: 'Edição limitada' }
     ];
@@ -368,7 +270,7 @@ async function renderProducts() {
         const v = await createViewer(viewerEl, cam, { autoRotate: true });
         state.productViewers[cam.id] = v;
       }
-    }, 150 * idx);
+    }, 200 * idx);
 
     card.querySelector('[data-explore]').onclick = async () => {
       const modal = document.getElementById('viewerModal');
