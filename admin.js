@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-const ADMIN = { logado: false, abaAtiva: 'config', previewViewer: null };
+const ADMIN = { logado: false, abaAtiva: 'config', previewViewer: null, currentPart: null };
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('lockBtn')?.addEventListener('click', () => {
@@ -87,69 +87,104 @@ function renderCamisetasTab(container) {
 function editCamisetaTexturas(id) {
   const c = window.__state.camisetas.find(x => String(x.id) === String(id));
   const content = document.getElementById('adminContent');
+  
+  // Layout com abas para as 4 partes
   content.innerHTML = `
     <h2 style="margin-bottom:16px;">Texturas: ${c.nome}</h2>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
       <div class="admin-form">
-        <div>
-          <label>Frente da Camisa</label>
-          <div class="upload-zone" data-upload="principal">
-            <input type="file" accept="image/*" data-file="principal">
-            <p>📤 Upload Frente</p>
-            <p class="upload-status" data-status="principal" style="color:var(--secondary);font-size:.8rem;"></p>
-          </div>
+        
+        <div style="display:flex; gap:5px; margin-bottom:20px; flex-wrap:wrap;">
+          <button class="btn-ghost part-btn active" data-part="frente">Frente</button>
+          <button class="btn-ghost part-btn" data-part="costas">Costas</button>
+          <button class="btn-ghost part-btn" data-part="manga">Mangas</button>
+          <button class="btn-ghost part-btn" data-part="gola">Gola</button>
         </div>
-        <div>
-          <label>Costas da Camisa</label>
-          <div class="upload-zone" data-upload="costas">
-            <input type="file" accept="image/*" data-file="costas">
-            <p>📤 Upload Costas</p>
-            <p class="upload-status" data-status="costas" style="color:var(--secondary);font-size:.8rem;"></p>
-          </div>
+
+        <!-- Inputs de Imagem -->
+        <div id="part-inputs">
+          ${['frente', 'costas', 'manga', 'gola'].map(part => `
+            <div class="upload-zone" data-upload="${part}" style="display:${part==='frente'?'block':'none'};">
+              <input type="file" accept="image/*" data-file="${part}">
+              <p>📤 Upload de Imagem (${part})</p>
+              <p class="upload-status" data-status="${part}" style="color:var(--secondary);font-size:.8rem;"></p>
+            </div>
+          `).join('')}
         </div>
-        <div>
-          <label>Tamanho da Estampa (Zoom)</label>
-          <input type="range" id="texScale" min="0.1" max="3" step="0.1" value="${c.textura_escala || 1}">
+
+        <div style="margin-top:20px; padding:15px; border:1px dashed var(--border); border-radius:8px; text-align:center;">
+          <p style="font-size:0.85rem; color:var(--text-dim);">Interação 3D Ativa</p>
+          <strong style="color:var(--secondary); font-size:1.1rem;" id="editLabel">Ajustando: Frente</strong><br>
+          <span style="font-size:0.8rem;">Arraste o mouse no manequim para mover a estampa.<br>Role o scroll para aumentar/diminuir.</span>
         </div>
-        <div style="display:flex;gap:10px;">
-          <div style="flex:1;"><label>Posição X</label><input type="range" id="texX" min="-1" max="1" step="0.1" value="${c.textura_offset_x || 0}"></div>
-          <div style="flex:1;"><label>Posição Y</label><input type="range" id="texY" min="-1" max="1" step="0.1" value="${c.textura_offset_y || 0}"></div>
-        </div>
-        <button class="btn-primary" id="saveTexSettings">Salvar Ajustes</button>
+
+        <button class="btn-primary" id="saveTexSettings" style="margin-top:20px;">Salvar Todos os Ajustes</button>
         <button class="btn-ghost" id="backTexBtn">← Voltar</button>
       </div>
       <div><div class="preview-3d" id="adminPreview"></div></div>
     </div>`;
-  
+
   document.getElementById('backTexBtn').onclick = () => { destroyPreview(); openAdminTab('camisetas'); };
+
+  // Controle de Abas
+  let currentPart = 'frente';
+  const partBtns = document.querySelectorAll('.part-btn');
   
-  const updatePreview = () => {
-    if (!ADMIN.previewViewer) return;
-    const scale = parseFloat(document.getElementById('texScale').value);
-    const offX = parseFloat(document.getElementById('texX').value);
-    const offY = parseFloat(document.getElementById('texY').value);
-    ADMIN.previewViewer.setTextures(ADMIN.texFront, ADMIN.texBack, scale, offX, offY);
+  partBtns.forEach(btn => {
+    btn.onclick = () => {
+      partBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentPart = btn.dataset.part;
+      
+      // Mostra apenas o input da aba atual
+      document.querySelectorAll('.upload-zone').forEach(z => z.style.display = 'none');
+      document.querySelector(`[data-upload="${currentPart}"]`).style.display = 'block';
+      
+      document.getElementById('editLabel').textContent = `Ajustando: ${currentPart.charAt(0).toUpperCase() + currentPart.slice(1)}`;
+      
+      // Ativa modo de edição no Three.js
+      if (ADMIN.previewViewer) {
+        ADMIN.previewViewer.setEditingMode(currentPart);
+      }
+    };
+  });
+
+  // Callback chamado quando o Three.js move a textura via mouse
+  window.__adminOnTextureChange = (part, cfg) => {
+    // Atualiza interface se necessário (opcional)
   };
 
-  document.getElementById('texScale').oninput = updatePreview;
-  document.getElementById('texX').oninput = updatePreview;
-  document.getElementById('texY').oninput = updatePreview;
+  // Configurar Inputs de Upload
+  ['frente', 'costas', 'manga', 'gola'].forEach(part => {
+    setupUpload(c, part, () => {});
+  });
 
+  // Salvar no Banco
   document.getElementById('saveTexSettings').onclick = async () => {
+    if (!ADMIN.previewViewer) return;
+    const cfg = ADMIN.previewViewer.configs;
     const dados = {
-      textura_escala: document.getElementById('texScale').value,
-      textura_offset_x: document.getElementById('texX').value,
-      textura_offset_y: document.getElementById('texY').value
+      scale_frente: cfg.frente.scale, x_frente: cfg.frente.x, y_frente: cfg.frente.y,
+      scale_costas: cfg.costas.scale, x_costas: cfg.costas.x, y_costas: cfg.costas.y,
+      scale_manga: cfg.manga.scale, x_manga: cfg.manga.x, y_manga: cfg.manga.y,
+      scale_gola: cfg.gola.scale
     };
     const r = await window.__apiPost({ action:'updateCamiseta', senha:getSenha(), id: c.id, dados });
-    if(r.ok) { Object.assign(c, dados); window.__toast('Ajustes salvos!'); }
+    if(r.ok) { Object.assign(c, dados); window.__toast('Ajustes de textura salvos!'); }
   };
 
-  setupUpload(c, 'principal', updatePreview);
-  setupUpload(c, 'costas', updatePreview);
+  // Iniciar Preview 3D
   initAdminPreview(c).then(() => {
-    window.__loadTexture(c.textura_principal, c.cor_base).then(t => { ADMIN.texFront = t; updatePreview(); });
-    window.__loadTexture(c.textura_costas, c.cor_base).then(t => { ADMIN.texBack = t; updatePreview(); });
+    // Carrega as texturas iniciais no Preview
+    Promise.all([
+      window.__loadTexture(c.textura_principal, c.cor_base),
+      window.__loadTexture(c.textura_costas, c.cor_base),
+      window.__loadTexture(c.textura_manga, c.cor_base),
+      window.__loadTexture(c.textura_gola, c.cor_base)
+    ]).then(([f, cB, m, g]) => {
+      ADMIN.previewViewer.setTextures(f, cB, m, g, ADMIN.previewViewer.configs);
+      ADMIN.previewViewer.setEditingMode('frente'); // Inicia editando a frente
+    });
   });
 }
 
@@ -167,20 +202,26 @@ function setupUpload(cam, tipo, cb) {
       const dataUrl = ev.target.result;
       const tex = new THREE.TextureLoader().load(dataUrl);
       tex.colorSpace = THREE.SRGBColorSpace; tex.flipY = false;
-      if (tipo === 'principal') ADMIN.texFront = tex;
-      else ADMIN.texBack = tex;
-      cb();
+      
+      // Atualiza preview imediatamente
+      if (ADMIN.previewViewer) {
+        const currentTextures = ADMIN.previewViewer.textures;
+        currentTextures[tipo] = tex;
+        ADMIN.previewViewer.setTextures(currentTextures.frente, currentTextures.costas, currentTextures.manga, currentTextures.gola, ADMIN.previewViewer.configs);
+      }
 
+      // Envia para API
       const base64 = dataUrl.split(',')[1];
       const r = await window.__apiPost({
         action:'uploadImagem', senha:getSenha(), camiseta_id: cam.id, tipo, base64,
         filename: input.files[0].name, mimeType: input.files[0].type
       });
+      
       if (r.ok) {
-        if (tipo === 'principal') cam.textura_principal = r.url;
-        else cam.textura_costas = r.url;
+        const campo = tipo === 'frente' ? 'textura_principal' : tipo === 'costas' ? 'textura_costas' : `textura_${tipo}`;
+        cam[campo] = r.url;
         status.textContent = '✓ Salva!';
-        window.__toast('Textura salva!');
+        window.__toast('Imagem enviada!');
       } else status.textContent = '✗ Erro';
     };
     reader.readAsDataURL(input.files[0]);
@@ -191,7 +232,7 @@ async function initAdminPreview(cam) {
   const el = document.getElementById('adminPreview');
   destroyPreview();
   await new Promise(r => setTimeout(r, 60));
-  ADMIN.previewViewer = await window.__createViewer(el, cam, { autoRotate: true });
+  ADMIN.previewViewer = await window.__createViewer(el, cam, { autoRotate: false });
 }
 
 function destroyPreview() {
