@@ -1,6 +1,3 @@
-Aqui está o código completo e já atualizado com as correções de enquadramento da câmara para focar o manequim da cintura para cima, tanto no banner principal (`heroViewer`) quanto nos visualizadores individuais (`createViewer`):
-
-```javascript
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -181,8 +178,7 @@ async function createViewer(el, cam, options = {}) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 1000);
   
-  // Aproxima a câmara (Z=1.4) e baixa a altura (Y=1.4)
-  camera.position.set(0, 1.4, 1.4);
+  camera.position.set(0, 1.65, 2.5);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
@@ -203,8 +199,7 @@ async function createViewer(el, cam, options = {}) {
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     
-    // Centraliza o giro no peito/barriga para subir o modelo no ecrã
-    controls.target.set(0, 1.3, 0); 
+    controls.target.set(0, 1.55, 0); 
     controls.minDistance = 0.1;
     controls.maxDistance = Infinity;
     controls.enablePan = false;
@@ -292,7 +287,7 @@ async function createViewer(el, cam, options = {}) {
       setAutoRotate(v) { controls.autoRotate = v; if (!v) pauseUntil = Infinity; else pauseUntil = 0; },
       zoomIn() { controls.dollyIn(1.2); controls.update(); },
       zoomOut() { controls.dollyOut(1.2); controls.update(); },
-      resetCamera() { camera.position.set(0, 1.4, 1.4); controls.target.set(0, 1.3, 0); controls.update(); }, // Ajustado aqui também
+      resetCamera() { camera.position.set(0, 1.65, 2.5); controls.target.set(0, 1.55, 0); controls.update(); },
       destroy() { cancelAnimationFrame(animId); ro.disconnect(); controls.dispose(); renderer.dispose(); el.innerHTML = ''; }
     };
 
@@ -304,7 +299,7 @@ async function createViewer(el, cam, options = {}) {
 }
 window.__createViewer = createViewer;
 
-// ============ HERO VIEWER (CÂMARA FIXA A DESLIZAR NO EIXO X) ============
+// ============ HERO VIEWER (LADO A LADO GIRANDO NO EIXO) ============
 async function initHeroViewer() {
   const el = document.getElementById('heroViewer');
   if (!el || state.camisetas.length === 0) return;
@@ -315,8 +310,8 @@ async function initHeroViewer() {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
   
-  // Câmara na altura do peito e bem mais próxima
-  camera.position.set(0, 1.4, 1.6); 
+  // CÂMERA FIXA: Enquadramento perfeito da cintura pra cima (Y=2.2) e visão geral (Z=3.8)
+  camera.position.set(0, 2.2, 3.8); 
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
@@ -334,84 +329,32 @@ async function initHeroViewer() {
   const wrappers = [];
   const totalModels = Math.min(3, state.camisetas.length);
   
-  // ESPAÇAMENTO: distância entre os manequins
-  const spacing = 3.0; 
+  // Espaçamento entre eles
+  const spacing = 2.2; 
 
   for (let i = 0; i < totalModels; i++) {
     const { wrapper } = await buildMannequin(state.camisetas[i]);
+    // Posiciona lado a lado
     wrapper.position.x = (i - 1) * spacing; 
     wrapper.position.y = -0.3; 
     scene.add(wrapper);
     wrappers.push(wrapper);
   }
 
-  let currentIndex = 0;
-  let statePhase = 'turning_back'; 
-  let phaseTimer = 0;
-  
-  // A câmara vai deslizar no eixo X para acompanhar o modelo
-  let currentCameraX = -(1) * spacing;
-  let targetCameraX = currentCameraX;
-  let extraSpinAngle = 0; 
-
   const clock = new THREE.Clock();
 
   function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
-    phaseTimer += delta;
+    const time = clock.getElapsedTime();
 
-    if (statePhase === 'turning_back') {
-      extraSpinAngle = Math.min(Math.PI, extraSpinAngle + delta * 2.5); 
-      if (extraSpinAngle >= Math.PI) { statePhase = 'pausing_back'; phaseTimer = 0; }
-    } 
-    else if (statePhase === 'pausing_back') {
-      if (phaseTimer > 2.0) { statePhase = 'turning_front'; }
-    }
-    else if (statePhase === 'turning_front') {
-      extraSpinAngle = Math.max(0, extraSpinAngle - delta * 2.5);
-      if (extraSpinAngle <= 0) { statePhase = 'pausing_front'; phaseTimer = 0; }
-    }
-    else if (statePhase === 'pausing_front') {
-      if (phaseTimer > 1.0) { 
-        statePhase = 'sliding';
-        const nextIndex = (currentIndex + 1) % totalModels;
-        
-        // Atualiza a posição alvo da câmara no eixo X
-        targetCameraX = (nextIndex - 1) * spacing;
-        
-        // Se voltou para o início, repõe os modelos para não "voar" para trás
-        if (nextIndex === 0) {
-           wrappers.forEach((w, i) => { w.position.x = (i - 1) * spacing; });
-           currentCameraX = (totalModels - 1 - 1) * spacing; 
-           targetCameraX = -spacing;
-        }
-      }
-    }
-    else if (statePhase === 'sliding') {
-      const smoothFactor = 1 - Math.exp(-3.0 * delta); 
-      currentCameraX += (targetCameraX - currentCameraX) * smoothFactor;
-      
-      if (Math.abs(targetCameraX - currentCameraX) < 0.01) {
-        currentCameraX = targetCameraX;
-        currentIndex = (currentIndex + 1) % totalModels;
-        statePhase = 'turning_back';
-        phaseTimer = 0;
-        extraSpinAngle = 0;
-      }
-    }
-
-    // Move apenas a câmara e o seu alvo
-    camera.position.x = currentCameraX;
-    camera.position.y = 1.4; // Mantém na altura do peito
-    camera.lookAt(currentCameraX, 1.4, 0); // Foco baixado para a zona do peito
+    // Câmera fixa olhando para o centro (peito)
+    camera.lookAt(0, 2.0, 0);
     
-    wrappers.forEach((w, i) => {
-      if (i === currentIndex) {
-        w.rotation.y = extraSpinAngle;
-      } else {
-        w.rotation.y = 0;
-      }
+    // Todos os manequins giram no próprio eixo ao mesmo tempo
+    wrappers.forEach((w) => {
+      // O tempo * 0.8 dita a velocidade do giro
+      w.rotation.y = time * 0.8; 
     });
 
     renderer.render(scene, camera);
@@ -500,5 +443,3 @@ function initUI() {
 
 initUI();
 loadSite();
-
-```
