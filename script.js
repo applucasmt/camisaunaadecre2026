@@ -1,3 +1,6 @@
+Aqui está o código completo e já atualizado com as correções de enquadramento da câmara para focar o manequim da cintura para cima, tanto no banner principal (`heroViewer`) quanto nos visualizadores individuais (`createViewer`):
+
+```javascript
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -178,7 +181,8 @@ async function createViewer(el, cam, options = {}) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 1000);
   
-  camera.position.set(0, 1.65, 2.5);
+  // Aproxima a câmara (Z=1.4) e baixa a altura (Y=1.4)
+  camera.position.set(0, 1.4, 1.4);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
@@ -199,7 +203,8 @@ async function createViewer(el, cam, options = {}) {
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     
-    controls.target.set(0, 1.55, 0); 
+    // Centraliza o giro no peito/barriga para subir o modelo no ecrã
+    controls.target.set(0, 1.3, 0); 
     controls.minDistance = 0.1;
     controls.maxDistance = Infinity;
     controls.enablePan = false;
@@ -287,7 +292,7 @@ async function createViewer(el, cam, options = {}) {
       setAutoRotate(v) { controls.autoRotate = v; if (!v) pauseUntil = Infinity; else pauseUntil = 0; },
       zoomIn() { controls.dollyIn(1.2); controls.update(); },
       zoomOut() { controls.dollyOut(1.2); controls.update(); },
-      resetCamera() { camera.position.set(0, 1.65, 2.5); controls.target.set(0, 1.55, 0); controls.update(); },
+      resetCamera() { camera.position.set(0, 1.4, 1.4); controls.target.set(0, 1.3, 0); controls.update(); }, // Ajustado aqui também
       destroy() { cancelAnimationFrame(animId); ro.disconnect(); controls.dispose(); renderer.dispose(); el.innerHTML = ''; }
     };
 
@@ -299,7 +304,7 @@ async function createViewer(el, cam, options = {}) {
 }
 window.__createViewer = createViewer;
 
-// ============ HERO VIEWER (CÂMERA FIXA DESLIZANDO NO EIXO X) ============
+// ============ HERO VIEWER (CÂMARA FIXA A DESLIZAR NO EIXO X) ============
 async function initHeroViewer() {
   const el = document.getElementById('heroViewer');
   if (!el || state.camisetas.length === 0) return;
@@ -310,8 +315,8 @@ async function initHeroViewer() {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
   
-  // Câmera alta para enquadrar do peito pra cima
-  camera.position.set(0, 2.2, 3.5); 
+  // Câmara na altura do peito e bem mais próxima
+  camera.position.set(0, 1.4, 1.6); 
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
@@ -344,7 +349,7 @@ async function initHeroViewer() {
   let statePhase = 'turning_back'; 
   let phaseTimer = 0;
   
-  // A câmera vai deslizar no eixo X para acompanhar o modelo
+  // A câmara vai deslizar no eixo X para acompanhar o modelo
   let currentCameraX = -(1) * spacing;
   let targetCameraX = currentCameraX;
   let extraSpinAngle = 0; 
@@ -372,10 +377,10 @@ async function initHeroViewer() {
         statePhase = 'sliding';
         const nextIndex = (currentIndex + 1) % totalModels;
         
-        // Atualiza a posição alvo da câmera no eixo X
+        // Atualiza a posição alvo da câmara no eixo X
         targetCameraX = (nextIndex - 1) * spacing;
         
-        // Se voltou pro início, reseta os modelos para não "voar" pra trás
+        // Se voltou para o início, repõe os modelos para não "voar" para trás
         if (nextIndex === 0) {
            wrappers.forEach((w, i) => { w.position.x = (i - 1) * spacing; });
            currentCameraX = (totalModels - 1 - 1) * spacing; 
@@ -396,10 +401,10 @@ async function initHeroViewer() {
       }
     }
 
-    // Move apenas a câmera e o seu alvo
+    // Move apenas a câmara e o seu alvo
     camera.position.x = currentCameraX;
-    camera.position.y = 2.2; 
-    camera.lookAt(currentCameraX, 2.0, 0); // Foco no peito
+    camera.position.y = 1.4; // Mantém na altura do peito
+    camera.lookAt(currentCameraX, 1.4, 0); // Foco baixado para a zona do peito
     
     wrappers.forEach((w, i) => {
       if (i === currentIndex) {
@@ -495,3 +500,5 @@ function initUI() {
 
 initUI();
 loadSite();
+
+```
