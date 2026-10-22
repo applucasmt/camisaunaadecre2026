@@ -178,8 +178,8 @@ async function createViewer(el, cam, options = {}) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 1000);
   
-  // Ajuste no enquadramento dos cards (mais alto para focar da cabeça para baixo)
-  camera.position.set(0, 1.6, 2.2);
+  // Câmera puxada para trás (2.5) e mais alta
+  camera.position.set(0, 1.65, 2.5);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
@@ -199,8 +199,9 @@ async function createViewer(el, cam, options = {}) {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-    // Alvo ajustado para focar no peito/cabeça
-    controls.target.set(0, 1.6, 0); 
+    
+    // Alvo no topo (cabeça)
+    controls.target.set(0, 1.55, 0); 
     controls.minDistance = 0.1;
     controls.maxDistance = Infinity;
     controls.enablePan = false;
@@ -288,7 +289,7 @@ async function createViewer(el, cam, options = {}) {
       setAutoRotate(v) { controls.autoRotate = v; if (!v) pauseUntil = Infinity; else pauseUntil = 0; },
       zoomIn() { controls.dollyIn(1.2); controls.update(); },
       zoomOut() { controls.dollyOut(1.2); controls.update(); },
-      resetCamera() { camera.position.set(0, 1.6, 2.2); controls.target.set(0, 1.6, 0); controls.update(); },
+      resetCamera() { camera.position.set(0, 1.65, 2.5); controls.target.set(0, 1.55, 0); controls.update(); },
       destroy() { cancelAnimationFrame(animId); ro.disconnect(); controls.dispose(); renderer.dispose(); el.innerHTML = ''; }
     };
 
@@ -300,7 +301,7 @@ async function createViewer(el, cam, options = {}) {
 }
 window.__createViewer = createViewer;
 
-// ============ HERO VIEWER (SLIDER LATERAL - CABEÇA NO TOPO) ============
+// ============ HERO VIEWER (SLIDER LATERAL) ============
 async function initHeroViewer() {
   const el = document.getElementById('heroViewer');
   if (!el || state.camisetas.length === 0) return;
@@ -311,14 +312,14 @@ async function initHeroViewer() {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
   
-  // Câmera mais alta e com o alvo no topo para pegar da cabeça para baixo
-  camera.position.set(0, 1.6, 3.2); 
+  // Câmera puxada para trás (4.0) para caber o manequim e mostrar da cabeça para baixo
+  camera.position.set(0, 1.65, 4.0); 
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.domElement.style.pointerEvents = 'none'; // Sem interação com o mouse
+  renderer.domElement.style.pointerEvents = 'none'; // Sem interação com o mouse no Hero
   
   el.appendChild(renderer.domElement);
 
@@ -334,7 +335,7 @@ async function initHeroViewer() {
   for (let i = 0; i < totalModels; i++) {
     const { wrapper } = await buildMannequin(state.camisetas[i]);
     wrapper.position.x = (i - 1) * spacing; 
-    wrapper.position.y = -0.3; // Mantém no chão
+    wrapper.position.y = -0.3; // Mantém a base
     scene.add(wrapper);
     wrappers.push(wrapper);
   }
@@ -391,10 +392,10 @@ async function initHeroViewer() {
       }
     }
 
-    // Movimentação horizontal da câmera (Slider)
+    // Posição da câmera
     camera.position.x = currentCameraX;
-    camera.position.y = 1.6; // Fixa a altura da câmera na altura da cabeça
-    camera.lookAt(currentCameraX, 1.6, 0); // Aponta para a altura da cabeça
+    camera.position.y = 1.65; // Altura do peito/cabeça
+    camera.lookAt(currentCameraX, 1.55, 0); // Olha para a cabeça para a camisa ficar visível
     
     wrappers.forEach((w, i) => {
       if (i === currentIndex) {
