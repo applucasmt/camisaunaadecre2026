@@ -57,10 +57,11 @@ function fixDriveUrl(url) {
 async function loadTexture(url, fallbackColor) {
   const finalUrl = fixDriveUrl(url);
   if (!finalUrl) {
+    // Se não tiver URL, cria uma textura lisa da cor base da camisa
     const canvas = document.createElement('canvas'); 
     canvas.width = 512; canvas.height = 512;
     const ctx = canvas.getContext('2d'); 
-    ctx.fillStyle = fallbackColor || '#333'; 
+    ctx.fillStyle = fallbackColor || '#ffffff'; 
     ctx.fillRect(0, 0, 512, 512);
     const t = new THREE.CanvasTexture(canvas); 
     t.colorSpace = THREE.SRGBColorSpace; 
@@ -72,7 +73,12 @@ async function loadTexture(url, fallbackColor) {
     loader.setCrossOrigin('anonymous');
     loader.load(
       finalUrl, 
-      t => { t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; resolve(t); }, 
+      t => { 
+        t.anisotropy = 16; 
+        t.colorSpace = THREE.SRGBColorSpace; 
+        t.flipY = false; 
+        resolve(t); 
+      }, 
       undefined, 
       () => resolve(loadTexture(null, fallbackColor))
     );
@@ -106,23 +112,33 @@ function applyTshirtTexture(root, textures, configs) {
     const nome = child.name.toLowerCase();
     let tex = null, cfg = null, baseSize = 1.0;
 
+    // Mapeia as partes da camisa
     if (nome.includes('body_front')) { tex = textures.frente; cfg = configs.frente; baseSize = 0.6; }
     else if (nome.includes('body_back')) { tex = textures.costas; cfg = configs.costas; baseSize = 0.6; }
     else if (nome.includes('sleeves')) { tex = textures.manga; cfg = configs.manga; baseSize = 0.2; }
     else if (nome.includes('ribbing')) { tex = textures.gola; cfg = configs.gola; baseSize = 0.15; }
-    else { return; }
+    else { return; } // Ignora o corpo do boneco
 
     const mats = Array.isArray(child.material) ? child.material : [child.material];
     mats.forEach(mat => {
-      mat.metalness = 0.0; mat.roughness = 0.8; mat.side = THREE.DoubleSide;
+      // Configuração de material da camisa
+      mat.metalness = 0.0; 
+      mat.roughness = 0.9; 
+      mat.side = THREE.DoubleSide;
+      
       if (tex) {
         tex.center.set(0.5, 0.5); 
         tex.repeat.set(baseSize * (cfg.scale || 1), baseSize * (cfg.scale || 1));
         tex.offset.set(cfg.x || 0, cfg.y || 0);
         tex.flipY = false; 
+        
         mat.map = tex; 
-        mat.color.setHex(0xffffff);
-      } else { mat.map = null; mat.color.set(0xffffff); }
+        mat.color.setHex(0xffffff); // Mantém a cor da textura pura e nítida
+        mat.transparent = false;
+      } else { 
+        mat.map = null; 
+        mat.color.setHex(0xffffff); 
+      }
       mat.needsUpdate = true;
     });
   });
@@ -132,11 +148,14 @@ function applyMannequinColors(root, colors) {
   root.traverse(child => {
     if (!child.isMesh) return;
     const nome = child.name.toLowerCase();
+    
+    // Identifica o que é camisa para NÃO pintar
     const isShirt = nome.includes('body_front') || nome.includes('body_back') || 
                     nome.includes('sleeves') || nome.includes('ribbing');
     if (isShirt) return;
 
-    let colorHex = colors.corpo || '#d4d4d4';
+    // Define a cor correta com base no nome do osso/malha
+    let colorHex = colors.corpo || '#d4d4d4'; // Pele padrão
     if (nome.includes('hair') || nome.includes('cabelo')) colorHex = colors.cabelo || '#222222';
     else if (nome.includes('jeans') || nome.includes('pants') || nome.includes('calca') || 
              nome.includes('leg') || nome.includes('shoe')) colorHex = colors.calca || '#1a1a1a';
@@ -145,7 +164,9 @@ function applyMannequinColors(root, colors) {
       const mats = Array.isArray(child.material) ? child.material : [child.material];
       mats.forEach(mat => { 
         if (mat.color) mat.color.set(colorHex).convertSRGBToLinear(); 
-        mat.map = null; 
+        mat.map = null; // LIMPA QUALQUER TEXTURA VAZADA DA CAMISA
+        mat.metalness = 0.1; // Um leve brilho na pele
+        mat.roughness = 0.7;
         mat.needsUpdate = true; 
       });
     }
@@ -159,6 +180,7 @@ async function buildMannequin(cam) {
   model.traverse(child => {
     if (!child.isMesh) return;
     child.frustumCulled = false; 
+    // Clona materiais para não afetar outros manequins
     child.material = Array.isArray(child.material) 
       ? child.material.map(m => m.clone()) 
       : child.material.clone();
@@ -181,6 +203,7 @@ async function buildMannequin(cam) {
 
   wrapper.add(spinner);
 
+  // Carrega as texturas
   const textures = {
     frente: await loadTexture(cam.textura_principal, cam.cor_base),
     costas: await loadTexture(cam.textura_costas, cam.cor_base),
@@ -195,10 +218,11 @@ async function buildMannequin(cam) {
     gola: { scale: parseFloat(cam.scale_gola)||1, x: 0, y: 0 }
   };
 
+  // Cores do Boneco (Fallback para caso a API não envie)
   const mannequinColors = {
-    corpo: cam.cor_corpo || '#d4d4d4',
-    cabelo: cam.cor_cabelo || '#222222',
-    calca: cam.cor_calca || '#1a1a1a'
+    corpo: cam.cor_corpo || '#e0e0e0',
+    cabelo: cam.cor_cabelo || '#333333',
+    calca: cam.cor_calca || '#ffffff'
   };
 
   applyTshirtTexture(model, textures, configs);
@@ -222,9 +246,9 @@ async function initApp() {
     if(state.camisetas[2]) { document.getElementById('nome-3').textContent = state.camisetas[2].nome; document.getElementById('desc-3').textContent = state.camisetas[2].descricao; }
   } else {
     state.camisetas = [
-      { id: 1, nome: 'Classic Black', descricao: 'Algodão premium penteado 30.1. Design minimalista que combina com tudo.', cor_base: '#111111' },
-      { id: 2, nome: 'Urban White', descricao: 'Modelagem oversized com toque suave. Peça-chave do guarda-roupa.', cor_base: '#f5f5f5' },
-      { id: 3, nome: 'Gold Edition', descricao: 'Edição limitada com acabamento exclusivo. Detalhes em dourado.', cor_base: '#d4af37' }
+      { id: 1, nome: 'Classic Black', descricao: 'Algodão premium penteado 30.1. Design minimalista que combina com tudo.', cor_base: '#111111', cor_corpo: '#e0e0e0', cor_calca: '#1a1a1a' },
+      { id: 2, nome: 'Urban White', descricao: 'Modelagem oversized com toque suave. Peça-chave do guarda-roupa.', cor_base: '#f5f5f5', cor_corpo: '#d4d4d4', cor_calca: '#2a2a2a' },
+      { id: 3, nome: 'Gold Edition', descricao: 'Edição limitada com acabamento exclusivo. Detalhes em dourado.', cor_base: '#d4af37', cor_corpo: '#c0c0c0', cor_calca: '#000000' }
     ];
   }
 
@@ -243,11 +267,24 @@ async function initApp() {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   container.appendChild(renderer.domElement);
 
-  // Iluminação Premium
-  scene.add(new THREE.AmbientLight(0xffffff, 2.0));
-  const key = new THREE.DirectionalLight(0xffffff, 2.5); key.position.set(3, 6, 5); scene.add(key);
-  const fill = new THREE.DirectionalLight(0xffffff, 1.5); fill.position.set(-5, 3, 3); scene.add(fill);
-  const rim = new THREE.DirectionalLight(0xd4af37, 2.0); rim.position.set(0, 3, -6); scene.add(rim);
+  // Iluminação Premium - Evita aspecto "monocromático"
+  scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+  
+  const key = new THREE.DirectionalLight(0xffffff, 2.5); 
+  key.position.set(3, 6, 5); 
+  scene.add(key);
+  
+  const fill = new THREE.DirectionalLight(0xffffff, 1.2); 
+  fill.position.set(-5, 3, 3); 
+  scene.add(fill);
+  
+  const rim = new THREE.DirectionalLight(0xd4af37, 2.0); 
+  rim.position.set(0, 3, -6); 
+  scene.add(rim);
+  
+  const bottom = new THREE.DirectionalLight(0xffffff, 0.5);
+  bottom.position.set(0, -3, 2);
+  scene.add(bottom);
 
   const modelsData = [];
   const totalModels = Math.min(3, state.camisetas.length);
@@ -275,7 +312,7 @@ async function initApp() {
   }
   updateCamera();
 
-  // S1 -> S2: Zoom e foco na cintura
+  // S1 -> S2: Zoom e foco
   ScrollTrigger.create({
     trigger: "#s2", start: "top bottom", end: "top top", scrub: 1,
     onUpdate: self => {
@@ -295,7 +332,7 @@ async function initApp() {
     }
   });
 
-  // S3 -> S4: Transição Modelo 1 para Modelo 2
+  // S3 -> S4: Transição Modelo 1 -> Modelo 2
   ScrollTrigger.create({
     trigger: "#s4", start: "top bottom", end: "top top", scrub: 1,
     onUpdate: self => {
@@ -315,7 +352,7 @@ async function initApp() {
     }
   });
 
-  // S5 -> S6: Transição Modelo 2 para Modelo 3
+  // S5 -> S6: Transição Modelo 2 -> Modelo 3
   ScrollTrigger.create({
     trigger: "#s6", start: "top bottom", end: "top top", scrub: 1,
     onUpdate: self => {
@@ -345,7 +382,7 @@ async function initApp() {
     });
   });
 
-  // Lógica do Popup de Deslizar
+  // Lógica do Popup
   const popup = document.getElementById('scrollPopup');
   if (popup) {
     window.addEventListener('scroll', () => {
