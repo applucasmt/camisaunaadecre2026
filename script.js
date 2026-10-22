@@ -242,7 +242,7 @@ async function createViewer(el, cam, options = {}) {
 window.__createViewer = createViewer;
 
 // ==========================================
-// CORE: SCROLLTELLING APPLE (CLOSE-UP NA CAMISA)
+// CORE: SCROLLTELLING APPLE (ZOOM EXTREMO NA CAMISA)
 // ==========================================
 async function initApp() {
   gsap.registerPlugin(ScrollTrigger);
@@ -266,8 +266,8 @@ async function initApp() {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
   
-  // Câmera posicionada para o Close-up da camisa (Z = 2.2)
-  camera.position.set(0, 2.0, 2.2); 
+  // CÂMERA ULTRA CLOSE-UP: Z=1.0 (super perto), Y=1.8 (altura do peito)
+  camera.position.set(0, 1.8, 1.0); 
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -284,8 +284,8 @@ async function initApp() {
   scene.add(group);
   
   const totalModels = Math.min(3, state.camisetas.length);
-  // Distância lateral entre os manequins
-  const spacing = 4.5; 
+  // ESPAÇAMENTO GIGANTE: Para eles não colidirem nesse zoom extremo
+  const spacing = 6.5; 
 
   for (let i = 0; i < totalModels; i++) {
     const { wrapper } = await buildMannequin(state.camisetas[i]);
@@ -321,9 +321,8 @@ async function initApp() {
     });
   });
 
-  // Foco da câmera (LookAt Target)
-  // O Y=1.8 foca no peito, o que preenche a tela com a camisa!
-  const lookAtTarget = { x: 0, y: 1.8, z: 0 };
+  // O ponto para onde a câmera olha (focado na camisa)
+  const lookAtTarget = { x: 0, y: 1.5, z: 0 };
 
   const tl = gsap.timeline({
     scrollTrigger: {
@@ -335,14 +334,13 @@ async function initApp() {
   });
 
   // Seção 1 -> Seção 2 (Foco no Centro)
-  tl.to(camera.position, { z: 2.2, y: 2.0, scrollTrigger: { trigger: "#s2", start: "top bottom", end: "top top", scrub: 1 } })
-    .to(lookAtTarget, { x: 0, y: 1.8, z: 0, onUpdate: () => camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z), scrollTrigger: { trigger: "#s2", start: "top bottom", end: "top top", scrub: 1 } }, "<");
+  tl.to(lookAtTarget, { x: 0, y: 1.5, z: 0, onUpdate: () => camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z), scrollTrigger: { trigger: "#s2", start: "top bottom", end: "top top", scrub: 1 } });
 
   // Seção 2 -> Seção 3 (Vira para a Direita)
-  tl.to(lookAtTarget, { x: spacing, y: 1.8, z: 0, onUpdate: () => camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z), scrollTrigger: { trigger: "#s3", start: "top bottom", end: "top top", scrub: 1 } });
+  tl.to(lookAtTarget, { x: spacing, y: 1.5, z: 0, onUpdate: () => camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z), scrollTrigger: { trigger: "#s3", start: "top bottom", end: "top top", scrub: 1 } });
 
   // Seção 3 -> Seção 4 (Vira para a Esquerda)
-  tl.to(lookAtTarget, { x: -spacing, y: 1.8, z: 0, onUpdate: () => camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z), scrollTrigger: { trigger: "#s4", start: "top bottom", end: "top top", scrub: 1 } });
+  tl.to(lookAtTarget, { x: -spacing, y: 1.5, z: 0, onUpdate: () => camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z), scrollTrigger: { trigger: "#s4", start: "top bottom", end: "top top", scrub: 1 } });
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -355,7 +353,7 @@ async function initApp() {
 }
 
 // ==========================================
-// PAINEL ADMINISTRATIVO
+// PAINEL ADMINISTRATIVO (MANTIDO)
 // ==========================================
 function initAdmin() {
   const ADMIN = { logado: false, abaAtiva: 'config', previewViewer: null };
