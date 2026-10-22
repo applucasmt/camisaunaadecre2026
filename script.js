@@ -68,7 +68,6 @@ async function loadTexture(url, fallbackColor) {
       t => { 
         t.anisotropy = 8; 
         t.colorSpace = THREE.SRGBColorSpace; 
-        // Ajuste importante para o mapeamento da estampa não ficar de cabeça para baixo
         t.flipY = false; 
         resolve(t); 
       },
@@ -84,7 +83,6 @@ async function loadAvatarModel() {
   if (gltfCache) return gltfCache;
   const loader = new GLTFLoader();
   return new Promise((resolve, reject) => {
-    // Carrega o arquivo camisa.glb que está na raiz do projeto
     loader.load('./camisa.glb', (gltf) => {
       gltfCache = gltf.scene;
       resolve(gltfCache);
@@ -97,20 +95,12 @@ function applyTshirtTexture(root, texture) {
   root.traverse((child) => {
     if (child.isMesh) {
       const nome = child.name.toLowerCase();
-      
-      // Peças que formam a camiseta no seu modelo 3D
-      const partesDaCamisa = [
-        'body_front', 'body_back', 'sleeves', 'sleeves_1', 'ribbing', 'ribbing_1'
-      ];
-      
+      const partesDaCamisa = ['body_front', 'body_back', 'sleeves', 'sleeves_1', 'ribbing', 'ribbing_1'];
       const isCamisa = partesDaCamisa.some(parte => nome.includes(parte));
 
       if (isCamisa) {
-        // Clona o material para não afetar o original em cache
         child.material = child.material.clone();
         child.material.map = texture;
-        
-        // Deixa o material branco para mostrar as cores reais da textura
         child.material.color.setHex(0xffffff); 
         child.material.metalness = 0.0;
         child.material.roughness = 0.8;
@@ -120,14 +110,14 @@ function applyTshirtTexture(root, texture) {
   });
 }
 
-// ============ CRIAR VIEWER ============
+// ============ CRIAR VIEWER COM AUTO-FIT ============
 async function createViewer(el, cam, options = {}) {
   const w = el.clientWidth || 400;
   const h = el.clientHeight || 400;
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(35, w/h, 0.1, 200);
-  camera.position.set(0, 1.0, 5); // Câmera ajustada para o modelo
+  // Câmera inicial (será reposicionada após carregar o modelo)
+  const camera = new THREE.PerspectiveCamera(45, w/h, 0.1, 1000);
 
   const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
   renderer.setSize(w, h);
@@ -136,32 +126,48 @@ async function createViewer(el, cam, options = {}) {
   el.appendChild(renderer.domElement);
 
   // Iluminação de Estúdio
-  scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+  scene.add(new THREE.AmbientLight(0xffffff, 1.2));
   const key = new THREE.DirectionalLight(0xffffff, 2.5); key.position.set(2, 5, 4); scene.add(key);
-  const fill = new THREE.DirectionalLight(0xffffff, 1.0); fill.position.set(-4, 3, 2); scene.add(fill);
-  const rim = new THREE.DirectionalLight(0xd4af37, 1.5); rim.position.set(0, 2, -5); scene.add(rim);
+  const fill = new THREE.DirectionalLight(0xffffff, 1.5); fill.position.set(-4, 3, 2); scene.add(fill);
+  const rim = new THREE.DirectionalLight(0xd4af37, 2.0); rim.position.set(0, 2, -5); scene.add(rim);
 
   try {
     const originalModel = await loadAvatarModel();
     const model = originalModel.clone(true);
     
-    // === AJUSTE DE POSIÇÃO DO MODELO ===
-    // Se o modelo ficar "flutuando" ou muito baixo, altere o -1.2
-    model.position.y = -1.2; 
-    model.scale.set(1.0, 1.0, 1.0); // Se ficar muito grande, diminua para 0.8
+    // 1. CALCULA O TAMANHO REAL DO MODELO
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+
+    // 2. NORMALIZA A ESCALA (Força o modelo a ter 2 metros de altura)
+    const targetHeight = 2.0;
+    const scaleFactor = targetHeight / size.y;
+    model.scale.setScalar(scaleFactor);
+    
+    // 3. REPOSICIONA PARA O CENTRO DO CHÃO (Y = 0)
+    model.position.x = -center.x * scaleFactor;
+    model.position.z = -center.z * scaleFactor;
+    model.position.y = -box.min.y * scaleFactor; // Base do modelo toca o chão
 
     const tex = await loadTexture(cam.textura_principal, cam.cor_base);
     applyTshirtTexture(model, tex);
-
     scene.add(model);
 
+    // 4. AJUSTA A CÂMERA AUTOMATICAMENTE
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-    controls.target.set(0, 1.0, 0); // Foca no peito
-    controls.enablePan = false;
-    controls.minDistance = 2;
+    
+    // Foca no peito do modelo (metade da altura)
+    controls.target.set(0, 1.2, 0);
+    
+    // Coloca a câmera a uma distância segura
+    camera.position.set(0, 1.2, 3.5);
+    controls.minDistance = 1.0;
     controls.maxDistance = 10;
+    controls.enablePan = false;
+    
     controls.autoRotate = options.autoRotate !== false;
     controls.autoRotateSpeed = 1.5;
 
@@ -192,8 +198,8 @@ async function createViewer(el, cam, options = {}) {
       setTexture(texture) { applyTshirtTexture(model, texture); },
       setAutoRotate(v) { controls.autoRotate = v; if (!v) pauseUntil = Infinity; else pauseUntil = 0; },
       resetCamera() {
-        camera.position.set(0, 1.0, 5);
-        controls.target.set(0, 1.0, 0);
+        camera.position.set(0, 1.2, 3.5);
+        controls.target.set(0, 1.2, 0);
         controls.update();
       },
       destroy() {
@@ -205,8 +211,8 @@ async function createViewer(el, cam, options = {}) {
     };
 
   } catch (error) {
-    console.error('Falha ao carregar o modelo 3D. Verifique se camisa.glb está na raiz.', error);
-    el.innerHTML = '<p style="padding:20px;color:#ff4d4d;font-size:.9rem;text-align:center;">⚠️ Erro ao carregar.<br>O arquivo <b>camisa.glb</b> não foi encontrado na raiz.</p>';
+    console.error('Falha ao carregar o modelo 3D.', error);
+    el.innerHTML = '<p style="padding:20px;color:#ff4d4d;font-size:.9rem;text-align:center;">⚠️ Erro ao carregar <b>camisa.glb</b>.</p>';
     return null;
   }
 }
@@ -228,7 +234,6 @@ async function loadSite() {
   } catch (e) {
     console.error(e);
     toast('Erro ao carregar dados.', true);
-    // Fallback para não quebrar a tela se a API falhar
     state.camisetas = [
       { id: 1, nome: 'Classic Black', descricao: 'Algodão premium', cor_base: '#111111', destaque: 'Silhueta atemporal' },
       { id: 2, nome: 'Urban White', descricao: 'Modelagem oversized', cor_base: '#f5f5f5', destaque: 'Minimalismo urbano' },
