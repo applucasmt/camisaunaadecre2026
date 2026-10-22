@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Elegance Wear — Apresentação 3D</title>
+<title>Elegance Wear — Experiência 3D</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👕</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -18,71 +18,66 @@
 </head>
 <body>
 
+<!-- HEADER FIXO -->
 <header class="header" id="header">
   <div class="container header-inner">
     <a href="#" class="logo" id="siteLogo">ELEGANCE<span>·</span>WEAR</a>
     <nav class="nav" id="mainNav">
-      <a href="#hero">Início</a>
-      <a href="#showcase">Coleção 3D</a>
-      <a href="#sobre">Sobre</a>
+      <a href="#section-1">Apresentação</a>
+      <a href="#section-2">Detalhes</a>
+      <a href="#section-3">Coleção</a>
     </nav>
-    <button class="menu-toggle" id="menuToggle"><span></span><span></span><span></span></button>
   </div>
 </header>
 
-<section class="hero" id="hero">
-  <div class="container hero-inner">
-    <div class="hero-text">
-      <span class="badge">COLEÇÃO 2026 — APRESENTAÇÃO 3D</span>
+<!-- SCROLL EXPERIENCE -->
+<div class="scroll-container">
+  
+  <!-- CANVAS 3D FIXO NO FUNDO -->
+  <div class="canvas-wrapper">
+    <div id="webgl-container"></div>
+    <div class="canvas-overlay"></div>
+  </div>
+
+  <!-- SEÇÃO 1: INTRODUÇÃO -->
+  <section class="scroll-section" id="section-1">
+    <div class="content-box">
+      <span class="badge">COLEÇÃO 2026</span>
       <h1 id="heroTitle">ELEGANCE WEAR</h1>
-      <p id="heroSub">Apresentação 3D da coleção 2026. Gire, aproxime e explore cada detalhe.</p>
-      <a href="#showcase" class="btn-primary" id="heroCta">Ver Coleção 3D</a>
+      <p id="heroSub">A nova definição de estilo. Gire, aproxime e sinta cada detalhe do algodão premium.</p>
+      <div class="scroll-hint">Role para explorar ⌄</div>
     </div>
-    <div class="hero-canvas-wrap">
-      <div id="heroViewer" class="viewer"></div>
-      <div class="viewer-badge">Manequim 3D interativo</div>
-    </div>
-  </div>
-</section>
+  </section>
 
-<section class="showcase" id="showcase">
-  <div class="container">
-    <div class="section-head">
-      <span class="eyebrow">APRESENTAÇÃO</span>
-      <h2>Explore os 3 modelos</h2>
+  <!-- SEÇÃO 2: FRENTE E COSTAS -->
+  <section class="scroll-section" id="section-2">
+    <div class="content-box align-right">
+      <h2>Design em 360º</h2>
+      <p>Visualize a modelagem oversized e a estampa exclusiva por todos os ângulos, com precisão milimétrica.</p>
     </div>
-    <div class="products-grid" id="productsGrid"></div>
-  </div>
-</section>
+  </section>
 
-<footer class="footer">
-  <div class="container footer-inner">
-    <div>
-      <p id="footerText">© 2026 Elegance Wear.</p>
-      <p class="socials" id="socials"></p>
+  <!-- SEÇÃO 3: DETALHE DO TECIDO -->
+  <section class="scroll-section" id="section-3">
+    <div class="content-box align-left">
+      <h2>Toque e Caimento</h2>
+      <p>Algodão penteado 30.1. Uma experiência de conforto que você sente à primeira vista.</p>
     </div>
-    <button class="lock-btn" id="lockBtn">🔒</button>
-  </div>
-</footer>
+  </section>
 
-<div class="viewer-modal" id="viewerModal">
-  <div class="viewer-modal-header">
-    <div>
-      <h3 id="viewerTitle">—</h3>
-      <p id="viewerDesc">—</p>
+  <!-- SEÇÃO 4: COMPRAR -->
+  <section class="scroll-section" id="section-4">
+    <div class="content-box text-center">
+      <h2>Pronto para elevar seu estilo?</h2>
+      <p>Explore a coleção completa em nosso site.</p>
+      <a href="#" class="btn-primary" id="cta-btn">Ver Coleção Completa</a>
     </div>
-    <button class="btn-ghost" id="closeViewer">Fechar ✕</button>
-  </div>
-  <div class="viewer-modal-body">
-    <div id="fullViewer" class="viewer full"></div>
-    <div class="viewer-controls">
-      <button class="btn-ghost" id="zoomOut">➖ Zoom</button>
-      <button class="btn-ghost" id="resetView">Resetar câmera</button>
-      <button class="btn-ghost" id="toggleAuto" data-paused="0">Pausar rotação</button>
-      <button class="btn-ghost" id="zoomIn">➕ Zoom</button>
-    </div>
-  </div>
+  </section>
+
 </div>
+
+<!-- ADMIN PANEL -->
+<button class="lock-btn" id="lockBtn" title="Painel Admin" aria-label="Painel Admin">🔒</button>
 
 <div class="modal" id="loginModal">
   <div class="modal-card">
