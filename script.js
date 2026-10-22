@@ -106,25 +106,24 @@ function loadAvatarModel() {
 }
 
 // ============ APLICA CORES E TEXTURAS ============
-function applyTshirtTexture(root, textures, configs) {
+function applyTshirtTexture(root, textures, configs, corBase) {
   root.traverse(child => {
     if (!child.isMesh) return;
     const nome = child.name.toLowerCase();
     let tex = null, cfg = null, baseSize = 1.0;
 
-    // Mapeia as partes da camisa
     if (nome.includes('body_front')) { tex = textures.frente; cfg = configs.frente; baseSize = 0.6; }
     else if (nome.includes('body_back')) { tex = textures.costas; cfg = configs.costas; baseSize = 0.6; }
     else if (nome.includes('sleeves')) { tex = textures.manga; cfg = configs.manga; baseSize = 0.2; }
     else if (nome.includes('ribbing')) { tex = textures.gola; cfg = configs.gola; baseSize = 0.15; }
-    else { return; } // Ignora o corpo do boneco
+    else { return; }
 
     const mats = Array.isArray(child.material) ? child.material : [child.material];
     mats.forEach(mat => {
       mat.metalness = 0.0; 
       mat.roughness = 0.8; 
       mat.side = THREE.DoubleSide;
-      mat.vertexColors = false; // Impede que cores originais do GLB sujem a textura
+      mat.vertexColors = false; 
       
       if (tex) {
         tex.center.set(0.5, 0.5); 
@@ -133,11 +132,10 @@ function applyTshirtTexture(root, textures, configs) {
         tex.flipY = false; 
         
         mat.map = tex; 
-        mat.color.setHex(0xffffff); // Mantém a cor da imagem pura
-        mat.transparent = false;
+        mat.color.setHex(0xffffff); // Textura pura (verde fica verde, rosa fica rosa)
       } else { 
         mat.map = null; 
-        mat.color.setHex(0xffffff); 
+        mat.color.set(corBase || '#ffffff'); 
       }
       mat.needsUpdate = true;
     });
@@ -149,7 +147,6 @@ function applyMannequinColors(root, colors) {
     if (!child.isMesh) return;
     const nome = child.name.toLowerCase();
     
-    // Identifica o que é camisa para NÃO pintar
     const isShirt = nome.includes('body_front') || nome.includes('body_back') || 
                     nome.includes('sleeves') || nome.includes('ribbing');
     if (isShirt) return;
@@ -163,7 +160,7 @@ function applyMannequinColors(root, colors) {
       const mats = Array.isArray(child.material) ? child.material : [child.material];
       mats.forEach(mat => { 
         if (mat.color) mat.color.set(colorHex).convertSRGBToLinear(); 
-        mat.map = null; // LIMPA QUALQUER TEXTURA VAZADA DA CAMISA
+        mat.map = null; // Força a cor sólida (ex: rosa) no corpo
         mat.vertexColors = false;
         mat.metalness = 0.1; 
         mat.roughness = 0.7;
@@ -222,7 +219,7 @@ async function buildMannequin(cam) {
     calca: cam.cor_calca || '#ffffff'
   };
 
-  applyTshirtTexture(model, textures, configs);
+  applyTshirtTexture(model, textures, configs, cam.cor_base);
   applyMannequinColors(model, mannequinColors);
   
   return { wrapper, spinner, model, textures, configs, mannequinColors };
@@ -242,6 +239,7 @@ async function createViewer(el, cam, options = {}) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.2;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
   el.appendChild(renderer.domElement);
 
   scene.add(new THREE.AmbientLight(0xffffff, 1.5));
@@ -280,13 +278,17 @@ async function createViewer(el, cam, options = {}) {
 
     return {
       scene, camera, renderer, wrapper, controls, model, textures, configs, mannequinColors,
-      setTextures(f, c, m, g, cfgs) {
+      setTextures(f, c, m, g, cfgs, corBase) {
         textures.frente = f || textures.frente;
         textures.costas = c || textures.costas;
         textures.manga = m || textures.manga;
         textures.gola = g || textures.gola;
         Object.assign(configs, cfgs);
-        applyTshirtTexture(model, textures, configs);
+        applyTshirtTexture(model, textures, configs, corBase);
+      },
+      setColors(colors) {
+        Object.assign(mannequinColors, colors);
+        applyMannequinColors(model, mannequinColors);
       },
       destroy() { 
         cancelAnimationFrame(animId); 
@@ -339,7 +341,6 @@ async function initApp() {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   container.appendChild(renderer.domElement);
 
-  // Iluminação
   scene.add(new THREE.AmbientLight(0xffffff, 1.5));
   const key = new THREE.DirectionalLight(0xffffff, 2.5); key.position.set(3, 6, 5); scene.add(key);
   const fill = new THREE.DirectionalLight(0xffffff, 1.2); fill.position.set(-5, 3, 3); scene.add(fill);
@@ -435,12 +436,11 @@ async function initApp() {
     ScrollTrigger.refresh();
   });
 
-  // INICIALIZA O PAINEL ADMINISTRATIVO (CORRIGIDO)
   initAdmin();
 }
 
 // ==========================================
-// PAINEL ADMINISTRATIVO (RECUPERADO)
+// PAINEL ADMINISTRATIVO (COMPLETO RESTAURADO)
 // ==========================================
 function initAdmin() {
   const ADMIN = { logado: false, abaAtiva: 'config', previewViewer: null };
@@ -510,8 +510,9 @@ function initAdmin() {
     container.innerHTML = `
       <h2 style="margin-bottom:24px;">Textos</h2>
       <div class="admin-form" id="configForm">
-        <div><label>Título</label><input name="titulo_site" value="${c.titulo_site || ''}"></div>
-        <button class="btn-primary" id="saveConfigBtn">Salvar</button>
+        <div><label>Título do Site</label><input name="titulo_site" value="${c.titulo_site || ''}"></div>
+        <div><label>Senha do Admin</label><input name="admin_senha" value="${c.admin_senha || ''}"></div>
+        <button class="btn-primary" id="saveConfigBtn">Salvar Configurações</button>
       </div>
     `;
     document.getElementById('saveConfigBtn').onclick = async () => {
@@ -524,11 +525,14 @@ function initAdmin() {
   
   function renderCamisetasTab(container) {
     container.innerHTML = `
-      <h2 style="margin-bottom:24px;">Modelos</h2>
+      <h2 style="margin-bottom:24px;">Modelos Cadastrados</h2>
       <div style="display:grid;gap:16px;">
         ${window.__state.camisetas.map(c => `
           <div style="border:1px solid var(--border);border-radius:12px;padding:20px;display:flex;gap:20px;align-items:center;">
-            <div style="flex:1;"><strong>${c.nome}</strong></div>
+            <div style="flex:1;">
+              <strong style="display:block; font-size:1.1rem;">${c.nome}</strong>
+              <span style="font-size:0.85rem; color:var(--text-dim);">${c.descricao || 'Sem descrição'}</span>
+            </div>
             <button class="btn-ghost" data-tex="${c.id}">Configurar 3D</button>
           </div>
         `).join('')}
@@ -539,31 +543,163 @@ function initAdmin() {
     );
   }
   
+  // ==========================================
+  // EDIÇÃO DE MODELO 3D, TEXTURAS E CORES
+  // ==========================================
   function editCamisetaTexturas(id) {
     const c = window.__state.camisetas.find(x => String(x.id) === String(id));
     const content = document.getElementById('adminContent');
+    
+    // Formulário Completo com URLs, Uploads, Cores e Posições
     content.innerHTML = `
-      <h2>Texturas: ${c.nome}</h2>
+      <h2>Configurar: ${c.nome}</h2>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
-        <div class="admin-form">
-          <div><label>Frente</label><input type="file" data-file="frente"></div>
-          <div><label>Costas</label><input type="file" data-file="costas"></div>
-          <button class="btn-primary">Salvar</button>
+        
+        <div class="admin-form" style="max-height: 70vh; overflow-y: auto; padding-right: 10px;">
+          
+          <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+            <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Textura Frente</h3>
+            <div><label>URL da Imagem</label><input type="text" id="urlFrente" value="${c.textura_principal || ''}" placeholder="https://..."></div>
+            <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileFrente"></div>
+            <div style="display:flex; gap:8px; margin-top:8px;">
+              <div style="flex:1"><label>X</label><input type="number" step="0.1" id="x_frente" value="${c.x_frente || 0}"></div>
+              <div style="flex:1"><label>Y</label><input type="number" step="0.1" id="y_frente" value="${c.y_frente || 0}"></div>
+              <div style="flex:1"><label>Escala</label><input type="number" step="0.1" id="scale_frente" value="${c.scale_frente || 1}"></div>
+            </div>
+          </div>
+
+          <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+            <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Textura Costas</h3>
+            <div><label>URL da Imagem</label><input type="text" id="urlCostas" value="${c.textura_costas || ''}" placeholder="https://..."></div>
+            <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileCostas"></div>
+            <div style="display:flex; gap:8px; margin-top:8px;">
+              <div style="flex:1"><label>X</label><input type="number" step="0.1" id="x_costas" value="${c.x_costas || 0}"></div>
+              <div style="flex:1"><label>Y</label><input type="number" step="0.1" id="y_costas" value="${c.y_costas || 0}"></div>
+              <div style="flex:1"><label>Escala</label><input type="number" step="0.1" id="scale_costas" value="${c.scale_costas || 1}"></div>
+            </div>
+          </div>
+
+          <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+            <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Cores do Manequim</h3>
+            <div style="display:flex; gap:8px; margin-bottom:8px;">
+              <div style="flex:1"><label>Corpo</label><input type="color" id="corCorpo" value="${c.cor_corpo || '#e0e0e0'}" style="height:40px; padding:4px; cursor:pointer;"></div>
+              <div style="flex:1"><label>Cabelo</label><input type="color" id="corCabelo" value="${c.cor_cabelo || '#333333'}" style="height:40px; padding:4px; cursor:pointer;"></div>
+              <div style="flex:1"><label>Calça</label><input type="color" id="corCalca" value="${c.cor_calca || '#1a1a1a'}" style="height:40px; padding:4px; cursor:pointer;"></div>
+            </div>
+            <div><label>Cor Base (Fundo se não tiver textura)</label><input type="color" id="corBase" value="${c.cor_base || '#ffffff'}" style="height:40px; padding:4px; cursor:pointer; width:100%"></div>
+          </div>
+
+          <button class="btn-primary" id="saveCamisetaBtn" style="margin-top:10px;">Salvar Alterações</button>
           <button class="btn-ghost" id="backTexBtn">← Voltar</button>
         </div>
+
         <div>
-          <div class="preview-3d" id="adminPreview" style="height: 500px; background: #000; border-radius:12px;"></div>
+          <div class="preview-3d" id="adminPreview" style="height: 100%; min-height: 500px; background: #000; border-radius:12px;"></div>
         </div>
       </div>
     `;
+
     document.getElementById('backTexBtn').onclick = () => { 
       destroyPreview(); 
       openAdminTab('camisetas'); 
     };
-    initAdminPreview(c).then(() => { 
-      window.__loadTexture(c.textura_principal, c.cor_base).then(t => { 
-        if (ADMIN.previewViewer) ADMIN.previewViewer.setTextures(t, null, null, null, ADMIN.previewViewer.configs); 
-      }); 
+
+    // Inicia o Preview 3D
+    initAdminPreview(c).then(() => {
+      if(!ADMIN.previewViewer) return;
+
+      // Funções para atualizar em tempo real
+      const applyCurrent = () => {
+        ADMIN.previewViewer.setColors({
+          corpo: document.getElementById('corCorpo').value,
+          cabelo: document.getElementById('corCabelo').value,
+          calca: document.getElementById('corCalca').value
+        });
+        ADMIN.previewViewer.setTextures(
+          ADMIN.previewViewer.textures.frente, 
+          ADMIN.previewViewer.textures.costas, 
+          ADMIN.previewViewer.textures.manga, 
+          ADMIN.previewViewer.textures.gola, 
+          {
+            frente: { scale: parseFloat(document.getElementById('scale_frente').value)||1, x: parseFloat(document.getElementById('x_frente').value)||0, y: parseFloat(document.getElementById('y_frente').value)||0 },
+            costas: { scale: parseFloat(document.getElementById('scale_costas').value)||1, x: parseFloat(document.getElementById('x_costas').value)||0, y: parseFloat(document.getElementById('y_costas').value)||0 },
+            manga: { scale: 1, x: 0, y: 0 },
+            gola: { scale: 1, x: 0, y: 0 }
+          },
+          document.getElementById('corBase').value
+        );
+      };
+
+      // Color inputs
+      ['corCorpo', 'corCabelo', 'corCalca', 'corBase'].forEach(id => {
+        document.getElementById(id).oninput = applyCurrent;
+      });
+
+      // Position inputs
+      ['x_frente', 'y_frente', 'scale_frente', 'x_costas', 'y_costas', 'scale_costas'].forEach(id => {
+        document.getElementById(id).oninput = applyCurrent;
+      });
+
+      // Upload Frente
+      document.getElementById('fileFrente').onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const url = URL.createObjectURL(file);
+          document.getElementById('urlFrente').value = url;
+          window.__loadTexture(url, c.cor_base).then(t => {
+            ADMIN.previewViewer.setTextures(t, null, null, null, ADMIN.previewViewer.configs, document.getElementById('corBase').value);
+          });
+        }
+      };
+
+      // Upload Costas
+      document.getElementById('fileCostas').onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const url = URL.createObjectURL(file);
+          document.getElementById('urlCostas').value = url;
+          window.__loadTexture(url, c.cor_base).then(t => {
+            ADMIN.previewViewer.setTextures(null, t, null, null, ADMIN.previewViewer.configs, document.getElementById('corBase').value);
+          });
+        }
+      };
+
+      // URL Inputs (aplica ao sair do campo)
+      document.getElementById('urlFrente').onchange = (e) => {
+        window.__loadTexture(e.target.value, c.cor_base).then(t => {
+          ADMIN.previewViewer.setTextures(t, null, null, null, ADMIN.previewViewer.configs, document.getElementById('corBase').value);
+        });
+      };
+      document.getElementById('urlCostas').onchange = (e) => {
+        window.__loadTexture(e.target.value, c.cor_base).then(t => {
+          ADMIN.previewViewer.setTextures(null, t, null, null, ADMIN.previewViewer.configs, document.getElementById('corBase').value);
+        });
+      };
+
+      // Salvar no Banco de Dados (API)
+      document.getElementById('saveCamisetaBtn').onclick = async () => {
+        const dados = {
+          textura_principal: document.getElementById('urlFrente').value,
+          textura_costas: document.getElementById('urlCostas').value,
+          x_frente: document.getElementById('x_frente').value,
+          y_frente: document.getElementById('y_frente').value,
+          scale_frente: document.getElementById('scale_frente').value,
+          x_costas: document.getElementById('x_costas').value,
+          y_costas: document.getElementById('y_costas').value,
+          scale_costas: document.getElementById('scale_costas').value,
+          cor_corpo: document.getElementById('corCorpo').value,
+          cor_cabelo: document.getElementById('corCabelo').value,
+          cor_calca: document.getElementById('corCalca').value,
+          cor_base: document.getElementById('corBase').value
+        };
+        const r = await window.__apiPost({ action:'updateCamiseta', senha:getSenha(), id: c.id, dados });
+        if (r.ok) {
+          Object.assign(c, dados);
+          window.__toast('Modelo salvo com sucesso!');
+        } else {
+          window.__toast('Erro ao salvar.', true);
+        }
+      };
     });
   }
   
