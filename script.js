@@ -334,12 +334,15 @@ async function initHeroViewer() {
     const { wrapper } = await buildMannequin(state.camisetas[i]);
     const angle = (i / totalModels) * Math.PI * 2;
     wrapper.position.set(Math.sin(angle) * radius, 0, Math.cos(angle) * radius);
+    
+    // Ao invés de usar lookAt (que causa o deitar), apenas define a rotação inicial compensando o ângulo
+    wrapper.rotation.y = -angle; 
+
     carouselGroup.add(wrapper);
     wrappers.push(wrapper);
   }
 
   let currentIndex = 0;
-  // Fases: 'turning_back' -> 'pausing_back' -> 'turning_front' -> 'pausing_front' -> 'moving_carousel'
   let statePhase = 'turning_back'; 
   let phaseTimer = 0;
   
@@ -354,20 +357,19 @@ async function initHeroViewer() {
     const delta = clock.getDelta();
     phaseTimer += delta;
 
-    // CONTROLE DE TEMPO E ANIMAÇÕES
     if (statePhase === 'turning_back') {
       extraSpinAngle = Math.min(Math.PI, extraSpinAngle + delta * 2.5); 
       if (extraSpinAngle >= Math.PI) { statePhase = 'pausing_back'; phaseTimer = 0; }
     } 
     else if (statePhase === 'pausing_back') {
-      if (phaseTimer > 2.0) { statePhase = 'turning_front'; } // 2 segundos olhando as costas
+      if (phaseTimer > 2.0) { statePhase = 'turning_front'; }
     }
     else if (statePhase === 'turning_front') {
       extraSpinAngle = Math.max(0, extraSpinAngle - delta * 2.5);
       if (extraSpinAngle <= 0) { statePhase = 'pausing_front'; phaseTimer = 0; }
     }
     else if (statePhase === 'pausing_front') {
-      if (phaseTimer > 1.0) { // 1 segundo olhando a frente
+      if (phaseTimer > 1.0) { 
         statePhase = 'moving_carousel';
         targetCarouselAngle = -((currentIndex + 1) / totalModels) * Math.PI * 2;
       }
@@ -385,16 +387,21 @@ async function initHeroViewer() {
       }
     }
 
-    // APLICA AS ROTAÇÕES
+    // APLICA ROTAÇÃO NO CARROSSEL
     carouselGroup.rotation.y = currentCarouselAngle;
     
+    // APLICA ROTAÇÃO NOS MANEQUINS
     wrappers.forEach((w, i) => {
+      const angleOffset = (i / totalModels) * Math.PI * 2;
+      // Compensação do carrossel para o manequim ficar de frente para o espectador
+      const camCompensation = -currentCarouselAngle - angleOffset;
+      
       if (i === currentIndex) {
-        // O manequim ativo gira no próprio eixo
-        w.rotation.y = extraSpinAngle;
+        // O manequim ativo soma o giro individual
+        w.rotation.y = camCompensation + extraSpinAngle;
       } else {
-        // Os manequins inativos ficam travados olhando para a câmera (100% de precisão)
-        w.lookAt(camera.position.x, w.position.y, camera.position.z);
+        // Os outros ficam travados de frente
+        w.rotation.y = camCompensation;
       }
     });
 
