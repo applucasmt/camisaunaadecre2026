@@ -123,7 +123,6 @@ function applyMannequinColors(root, colors) {
   });
 }
 
-// ============ CRIA O MODELO INDIVIDUAL ============
 async function buildMannequin(cam) {
   const originalModel = await loadAvatarModel();
   const model = cloneSkinned(originalModel);
@@ -172,7 +171,6 @@ async function buildMannequin(cam) {
   return { wrapper, model, textures, configs, mannequinColors };
 }
 
-// ============ VIEWER DOS PRODUTOS (CARDS INDIVIDUAIS) ============
 async function createViewer(el, cam, options = {}) {
   const w = el.clientWidth || 400;
   const h = el.clientHeight || 400;
@@ -299,7 +297,7 @@ async function createViewer(el, cam, options = {}) {
 }
 window.__createViewer = createViewer;
 
-// ============ HERO VIEWER (3 MODELOS JUNTOS) ============
+// ============ HERO VIEWER (CARROSSEL 3D) ============
 async function initHeroViewer() {
   const el = document.getElementById('heroViewer');
   if (!el || state.camisetas.length === 0) return;
@@ -310,8 +308,8 @@ async function initHeroViewer() {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
   
-  // Câmera ajustada para pegar os 3 modelos lado a lado
-  camera.position.set(0, 1.5, 5.5);
+  // CÂMERA MAIS PRÓXIMA (DA CINTURA PARA CIMA)
+  camera.position.set(0, 1.35, 2.8); 
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
@@ -324,43 +322,83 @@ async function initHeroViewer() {
   const fill = new THREE.DirectionalLight(0xffffff, 1.0); fill.position.set(-4, 3, 2); scene.add(fill);
   const rim = new THREE.DirectionalLight(0xd4af37, 1.5); rim.position.set(0, 2, -5); scene.add(rim);
 
-  // Carrega os 3 modelos
-  const wrappers = [];
-  for (let i = 0; i < Math.min(3, state.camisetas.length); i++) {
-    const { wrapper } = await buildMannequin(state.camisetas[i]);
-    
-    // POSICIONAMENTO DO TRIO (Um mais na frente, outro mais atrás)
-    // Modelo 1 (Esquerda, um pouco atrás)
-    if (i === 0) {
-      wrapper.position.set(-1.3, 0, -0.6); 
-      wrapper.rotation.y = 0.3;
-    } 
-    // Modelo 2 (Centro, mais para frente)
-    else if (i === 1) {
-      wrapper.position.set(0, 0, 0.4); 
-      wrapper.rotation.y = 0;
-    } 
-    // Modelo 3 (Direita, um pouco atrás)
-    else {
-      wrapper.position.set(1.3, 0, -0.6); 
-      wrapper.rotation.y = -0.3;
-    }
+  // Cria o grupo que vai girar (Carrossel)
+  const carouselGroup = new THREE.Group();
+  scene.add(carouselGroup);
 
-    scene.add(wrapper);
+  const totalModels = Math.min(3, state.camisetas.length);
+  const wrappers = [];
+  const radius = 1.8; // Distância do centro do círculo
+
+  for (let i = 0; i < totalModels; i++) {
+    const { wrapper } = await buildMannequin(state.camisetas[i]);
+    // Distribui os modelos num círculo de 360 graus
+    const angle = (i / totalModels) * Math.PI * 2;
+    wrapper.position.set(Math.sin(angle) * radius, 0, Math.cos(angle) * radius);
+    carouselGroup.add(wrapper);
     wrappers.push(wrapper);
   }
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-  controls.target.set(0, 1.0, 0);
+  controls.target.set(0, 1.3, 0); // Foco no peito
   controls.enablePan = false;
-  controls.autoRotate = true;
-  controls.autoRotateSpeed = 0.8; // Mais devagar para não enjoar
+  controls.enableZoom = false; // Desativa zoom no carrossel principal para manter o enquadramento
+  controls.autoRotate = false; // Não usa o autoRotate do OrbitControls, faremos manual
+
+  // LÓGICA DE ROTAÇÃO E TROCA
+  let currentIndex = 0;
+  let statePhase = 'spinning_model'; // Fases: 'spinning_model' -> 'moving_carousel'
+  let phaseTimer = 0;
+  
+  // Quanto mais devagar, mais elegante
+  const modelSpinSpeed = 1.2; 
+  const carouselMoveSpeed = 2.5;
+  const timeSpinning = 4.0; // Segundos girando 360º
+  const timeMoving = 1.5;   // Segundos para o carrossel trocar
+
+  const clock = new THREE.Clock();
 
   function animate() {
     requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+    const t = clock.getElapsedTime();
+
     controls.update();
+
+    if (statePhase === 'spinning_model') {
+      // O manequim atual gira no próprio eixo
+      const activeWrapper = wrappers[currentIndex];
+      if (activeWrapper) {
+        activeWrapper.rotation.y += modelSpinSpeed * delta;
+      }
+      
+      phaseTimer += delta;
+      if (phaseTimer > timeSpinning) {
+        // Ao terminar de girar, reseta a rotação dele e prepara para mover o carrossel
+        if (activeWrapper) activeWrapper.rotation.y = 0;
+        statePhase = 'moving_carousel';
+        phaseTimer = 0;
+      }
+    } 
+    else if (statePhase === 'moving_carousel') {
+      // O carrossel inteiro gira para colocar o próximo na frente
+      const targetAngle = -((currentIndex + 1) / totalModels) * Math.PI * 2;
+      
+      // Movimento suave (lerp)
+      carouselGroup.rotation.y += (targetAngle - carouselGroup.rotation.y) * (carouselMoveSpeed * delta);
+      
+      phaseTimer += delta;
+      if (phaseTimer > timeMoving) {
+        // Fixa a posição exata para não acumular erro
+        currentIndex = (currentIndex + 1) % totalModels;
+        carouselGroup.rotation.y = -(currentIndex / totalModels) * Math.PI * 2;
+        statePhase = 'spinning_model';
+        phaseTimer = 0;
+      }
+    }
+
     renderer.render(scene, camera);
   }
   animate();
@@ -397,10 +435,8 @@ async function renderProducts() {
   const grid = $('#productsGrid');
   grid.innerHTML = '';
   
-  // Inicializa o Hero com o trio
   await initHeroViewer();
 
-  // Cria os cards individuais
   state.camisetas.forEach((cam, idx) => {
     const card = document.createElement('div');
     card.className = 'product-card';
