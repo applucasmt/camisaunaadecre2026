@@ -297,7 +297,7 @@ async function createViewer(el, cam, options = {}) {
 }
 window.__createViewer = createViewer;
 
-// ============ HERO VIEWER (CARROSSEL 3D COM GIRO INDIVIDUAL) ============
+// ============ HERO VIEWER (CARROSSEL 3D COM GIRO INDIVIDUAL E BLOQUEIO) ============
 async function initHeroViewer() {
   const el = document.getElementById('heroViewer');
   if (!el || state.camisetas.length === 0) return;
@@ -307,12 +307,17 @@ async function initHeroViewer() {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
+  // Enquadramento da cintura para cima
   camera.position.set(0, 1.15, 2.8); 
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  
+  // BLOQUEIO DE INTERAÇÃO: Não deixa o usuário mexer na câmera
+  renderer.domElement.style.pointerEvents = 'none';
+  
   el.appendChild(renderer.domElement);
 
   scene.add(new THREE.AmbientLight(0xffffff, 1.5));
@@ -326,91 +331,77 @@ async function initHeroViewer() {
 
   const totalModels = Math.min(3, state.camisetas.length);
   const wrappers = [];
-  const innerGroups = []; // Guarda o grupo interno de cada manequim para girá-lo
   const radius = 1.8;
 
   for (let i = 0; i < totalModels; i++) {
     const { wrapper } = await buildMannequin(state.camisetas[i]);
-    
-    // Cria um grupo interno para girá-lo no próprio eixo
-    const innerGroup = new THREE.Group();
-    innerGroup.add(wrapper);
-    innerGroups.push(innerGroup);
-
+    // Distribui os modelos no círculo
     const angle = (i / totalModels) * Math.PI * 2;
     wrapper.position.set(Math.sin(angle) * radius, 0, Math.cos(angle) * radius);
     
+    // Inicializa todos virados para frente
+    wrapper.rotation.y = -angle; 
+
     carouselGroup.add(wrapper);
     wrappers.push(wrapper);
   }
 
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.08;
-  controls.target.set(0, 1.15, 0);
-  controls.enablePan = false;
-  controls.enableZoom = false; 
-  controls.autoRotate = false; 
-
   let currentIndex = 0;
-  let statePhase = 'spinning_model';
+  let statePhase = 'spinning_model'; 
   let phaseTimer = 0;
   
-  const modelSpinSpeed = 1.5; 
+  const modelSpinSpeed = 1.2; 
   const timeSpinning = 4.0; 
   const timeMoving = 2.5; 
   
   let currentCarouselAngle = 0;
+  let extraSpinAngle = 0; // Acumulador do giro individual do modelo atual
   const clock = new THREE.Clock();
 
   function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
 
-    controls.update();
-
     if (statePhase === 'spinning_model') {
-      // O manequim atual gira no próprio eixo
-      const activeWrapper = wrappers[currentIndex];
-      if (activeWrapper) {
-        activeWrapper.rotation.y += modelSpinSpeed * delta;
-      }
+      // O modelo gira no próprio eixo
+      extraSpinAngle += modelSpinSpeed * delta;
       
       phaseTimer += delta;
       if (phaseTimer > timeSpinning) {
-        if (activeWrapper) activeWrapper.rotation.y = 0; // Reseta o giro
+        extraSpinAngle = 0; // Reseta o giro para o próximo
         statePhase = 'moving_carousel';
         phaseTimer = 0;
       }
     } 
     else if (statePhase === 'moving_carousel') {
+      // O carrossel gira para o próximo
       const targetAngle = -((currentIndex + 1) / totalModels) * Math.PI * 2;
-      
       const smoothFactor = 1 - Math.exp(-3.0 * delta); 
       currentCarouselAngle += (targetAngle - currentCarouselAngle) * smoothFactor;
-      
-      carouselGroup.rotation.y = currentCarouselAngle;
       
       phaseTimer += delta;
       if (phaseTimer > timeMoving) {
         currentIndex = (currentIndex + 1) % totalModels;
         currentCarouselAngle = -(currentIndex / totalModels) * Math.PI * 2;
-        carouselGroup.rotation.y = currentCarouselAngle;
         statePhase = 'spinning_model';
         phaseTimer = 0;
       }
     }
 
-    // CORREÇÃO: Mantém os manequins sempre de frente para o observador e aplica o giro individual
+    // Aplica as rotações
+    carouselGroup.rotation.y = currentCarouselAngle;
+    
     wrappers.forEach((w, i) => {
-      // 1. A rotação aponta para a câmera (compensa o carrossel)
-      w.rotation.y = -carouselGroup.rotation.y;
+      // Todos os manequins precisam desfazer a rotação do carrossel para ficarem "de frente"
+      const angleOffset = (i / totalModels) * Math.PI * 2;
+      const camCompensation = -currentCarouselAngle - angleOffset;
       
-      // 2. O giro no próprio eixo é aplicado ao grupo interno
       if (i === currentIndex) {
-        // Se for o modelo da frente, aplica o giro individual
-        // Mas como o wrapper já tem a rotação da câmera, apenas somamos
-        // O giro é aplicado no wrapper diretamente em conjunto
+        // O modelo ativo soma o giro individual
+        w.rotation.y = camCompensation + extraSpinAngle;
+      } else {
+        // Os outros apenas ficam virados para frente
+        w.rotation.y = camCompensation;
       }
     });
 
