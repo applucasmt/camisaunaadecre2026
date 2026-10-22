@@ -3,7 +3,6 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 
-// ⚠️ URL DO SEU WEB APP DO GOOGLE APPS SCRIPT
 const API_URL = 'https://script.google.com/macros/s/AKfycbxnUijRFoBQZqxjPNtcjercaHiO5oIxmMViYEC4tC_DLgxApjOjTw9WCU4Fb8NSJKf7/exec';
 
 const state = { config: {}, camisetas: [], heroViewer: null, productViewers: {}, modalViewer: null };
@@ -21,7 +20,6 @@ function toast(msg, isError = false) {
 async function apiGet(action = 'getAll') {
   try { const r = await fetch(`${API_URL}?action=${action}`); return await r.json(); } catch (e) { return { ok: false }; }
 }
-
 async function apiPost(payload) {
   try {
     const r = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) });
@@ -30,7 +28,6 @@ async function apiPost(payload) {
 }
 window.__apiPost = apiPost;
 
-// ============ CORREÇÃO DO CORS DO DRIVE ============
 function fixDriveUrl(url) {
   if (!url) return url;
   if (url.includes('drive.google.com')) {
@@ -45,28 +42,16 @@ async function loadTexture(url, fallbackColor) {
   if (!finalUrl) {
     const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 512;
     const ctx = canvas.getContext('2d'); ctx.fillStyle = fallbackColor || '#333'; ctx.fillRect(0, 0, 512, 512);
-    const t = new THREE.CanvasTexture(canvas);
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.flipY = false;
-    return t;
+    const t = new THREE.CanvasTexture(canvas); t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; return t;
   }
   return new Promise(resolve => {
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin('anonymous');
-    loader.load(
-      finalUrl,
-      t => { t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; resolve(t); },
-      undefined,
-      () => resolve(loadTexture(null, fallbackColor))
-    );
+    loader.load(finalUrl, t => { t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; resolve(t); }, undefined, () => resolve(loadTexture(null, fallbackColor)));
   });
 }
 window.__loadTexture = loadTexture;
 
-// ============ CARREGAR O GLB (uma única vez) ============
-// O seu GLB referencia PNGs externos ("Tshirt and Jeans_diffuse_100X.png") que não existem
-// no servidor (erro 404). Trocamos essas requisições por um pixel branco, assim o modelo
-// carrega sem erros e o manequim/calça ficam com o tom claro do print de referência.
 const WHITE_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 let gltfPromise = null;
@@ -81,19 +66,25 @@ function loadAvatarModel() {
   return gltfPromise;
 }
 
-// ============ APLICAR COR / ESTAMPA NA CAMISETA ============
-// Peças da camisa no seu GLB: Body_Front, Body_Back, Sleeves (x2), Ribbing (x2)
-//  - Body_Front  -> estampa da frente
-//  - Body_Back   -> estampa das costas
-//  - Sleeves / Ribbing -> só a cor base (o UV delas é diferente do corpo, estampar aqui distorce)
-function applyTshirtTexture(root, frontTex, backTex, baseColor, scale = 1.0, offsetX = 0, offsetY = 0) {
+// ============ APLICAR TEXTURAS SEPARADAS ============
+function applyTshirtTexture(root, textures, configs) {
   root.traverse(child => {
     if (!child.isMesh) return;
     const nome = child.name.toLowerCase();
-    const isFront = nome.includes('body_front');
-    const isBack = nome.includes('body_back');
-    const isTrim = nome.includes('sleeves') || nome.includes('ribbing');
-    if (!(isFront || isBack || isTrim)) return;
+    
+    let tex = null, cfg = null;
+
+    if (nome.includes('body_front')) {
+      tex = textures.frente; cfg = configs.frente;
+    } else if (nome.includes('body_back')) {
+      tex = textures.costas; cfg = configs.costas;
+    } else if (nome.includes('sleeves')) {
+      tex = textures.manga; cfg = configs.manga;
+    } else if (nome.includes('ribbing')) {
+      tex = textures.gola; cfg = configs.gola;
+    } else {
+      return; // Não é camisa
+    }
 
     const mats = Array.isArray(child.material) ? child.material : [child.material];
     mats.forEach(mat => {
@@ -101,16 +92,15 @@ function applyTshirtTexture(root, frontTex, backTex, baseColor, scale = 1.0, off
       mat.roughness = 0.8;
       mat.side = THREE.DoubleSide;
 
-      const tex = isFront ? frontTex : isBack ? (backTex || frontTex) : null;
       if (tex) {
         tex.center.set(0.5, 0.5);
-        tex.repeat.set(scale, scale);
-        tex.offset.set(offsetX, offsetY);
+        tex.repeat.set(cfg.scale || 1, cfg.scale || 1);
+        tex.offset.set(cfg.x || 0, cfg.y || 0);
         mat.map = tex;
         mat.color.setHex(0xffffff);
       } else {
         mat.map = null;
-        mat.color.set(baseColor || 0xffffff);
+        mat.color.set(0xffffff); // fallback se não tiver imagem
       }
       mat.needsUpdate = true;
     });
@@ -141,22 +131,15 @@ async function createViewer(el, cam, options = {}) {
 
   try {
     const originalModel = await loadAvatarModel();
-
-    // ✅ clone que preserva esqueleto (manequim, cabelo, olhos, tênis são SkinnedMesh)
     const model = cloneSkinned(originalModel);
 
     model.traverse(child => {
       if (!child.isMesh) return;
-      child.frustumCulled = false; // evita sumir/piscar em malhas com esqueleto
-      // Materiais próprios por viewer (hero, cards e modal não se afetam)
-      child.material = Array.isArray(child.material)
-        ? child.material.map(m => m.clone())
-        : child.material.clone();
+      child.frustumCulled = false;
+      child.material = Array.isArray(child.material) ? child.material.map(m => m.clone()) : child.material.clone();
     });
-
     model.updateMatrixWorld(true);
 
-    // Medir e reposicionar (sem resetar escala/rotação do modelo)
     const box = new THREE.Box3().setFromObject(model);
     const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
@@ -168,11 +151,22 @@ async function createViewer(el, cam, options = {}) {
     wrapper.scale.setScalar(scaleFactor);
     wrapper.position.set(-center.x * scaleFactor, -box.min.y * scaleFactor, -center.z * scaleFactor);
 
-    // Texturas
-    const frontTex = await loadTexture(cam.textura_principal, cam.cor_base);
-    const backTex = await loadTexture(cam.textura_costas, cam.cor_base);
-    applyTshirtTexture(model, frontTex, backTex, cam.cor_base, cam.textura_escala || 1, cam.textura_offset_x || 0, cam.textura_offset_y || 0);
+    // Carrega Texturas (Frente, Costas, Manga, Gola)
+    const textures = {
+      frente: await loadTexture(cam.textura_principal, cam.cor_base),
+      costas: await loadTexture(cam.textura_costas, cam.cor_base),
+      manga: await loadTexture(cam.textura_manga, cam.cor_base),
+      gola: await loadTexture(cam.textura_gola, cam.cor_base)
+    };
+    
+    const configs = {
+      frente: { scale: parseFloat(cam.scale_frente)||1, x: parseFloat(cam.x_frente)||0, y: parseFloat(cam.y_frente)||0 },
+      costas: { scale: parseFloat(cam.scale_costas)||1, x: parseFloat(cam.x_costas)||0, y: parseFloat(cam.y_costas)||0 },
+      manga: { scale: parseFloat(cam.scale_manga)||1, x: parseFloat(cam.x_manga)||0, y: parseFloat(cam.y_manga)||0 },
+      gola: { scale: parseFloat(cam.scale_gola)||1, x: 0, y: 0 }
+    };
 
+    applyTshirtTexture(model, textures, configs);
     scene.add(wrapper);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -185,17 +179,71 @@ async function createViewer(el, cam, options = {}) {
     controls.autoRotate = options.autoRotate !== false;
     controls.autoRotateSpeed = 1.5;
 
-    let pauseUntil = 0;
-    const onInteract = () => { pauseUntil = performance.now() + 2500; };
-    renderer.domElement.addEventListener('pointerdown', onInteract);
+    // Lógica para edição via mouse (Arrastar e Scroll)
+    let isEditing = false;
+    let currentPart = null;
+    let currentTexConfig = null;
+    
+    // Eventos para manipular textura no painel
+    el.addEventListener('mousedown', (e) => { if (isEditing) e.stopPropagation(); }, true);
+    
+    let isDragging = false;
+    let prevX = 0, prevY = 0;
+
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+      if (isEditing && e.button === 0) {
+        isDragging = true; prevX = e.clientX; prevY = e.clientY;
+        controls.enabled = false;
+      }
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (isDragging && isEditing) {
+        const dx = (e.clientX - prevX) * 0.005;
+        const dy = (e.clientY - prevY) * 0.005;
+        prevX = e.clientX; prevY = e.clientY;
+        
+        currentTexConfig.x -= dx; 
+        currentTexConfig.y += dy;
+        currentTexConfig.x = Math.max(-2, Math.min(2, currentTexConfig.x));
+        currentTexConfig.y = Math.max(-2, Math.min(2, currentTexConfig.y));
+        
+        applyTshirtTexture(model, textures, configs);
+        if (window.__adminOnTextureChange) window.__adminOnTextureChange(currentPart, currentTexConfig);
+      }
+    });
+
+    window.addEventListener('pointerup', () => {
+      isDragging = false; controls.enabled = true;
+    });
+
+    renderer.domElement.addEventListener('wheel', (e) => {
+      if (isEditing) {
+        e.preventDefault(); 
+        const factor = e.deltaY > 0 ? -0.05 : 0.05;
+        currentTexConfig.scale += factor;
+        currentTexConfig.scale = Math.max(0.1, Math.min(5, currentTexConfig.scale));
+        applyTshirtTexture(model, textures, configs);
+        if (window.__adminOnTextureChange) window.__adminOnTextureChange(currentPart, currentTexConfig);
+      }
+    }, { passive: false });
 
     let animId;
     function animate() {
       animId = requestAnimationFrame(animate);
-      controls.autoRotate = (performance.now() > pauseUntil) && (options.autoRotate !== false);
+      if (!isEditing) {
+        controls.autoRotate = (performance.now() > pauseUntil) && (options.autoRotate !== false);
+      } else {
+        controls.autoRotate = false;
+      }
       controls.update();
       renderer.render(scene, camera);
     }
+    
+    let pauseUntil = 0;
+    const onInteract = () => { pauseUntil = performance.now() + 2500; };
+    renderer.domElement.addEventListener('pointerdown', onInteract);
+    
     animate();
 
     const ro = new ResizeObserver(() => {
@@ -206,8 +254,22 @@ async function createViewer(el, cam, options = {}) {
     ro.observe(el);
 
     return {
-      scene, camera, renderer, wrapper, controls, model,
-      setTextures(front, back, scale, offX, offY) { applyTshirtTexture(model, front, back, cam.cor_base, scale, offX, offY); },
+      scene, camera, renderer, wrapper, controls, model, textures, configs,
+      setTextures(f, c, m, g, cfgs) {
+        textures.frente = f || textures.frente;
+        textures.costas = c || textures.costas;
+        textures.manga = m || textures.manga;
+        textures.gola = g || textures.gola;
+        Object.assign(configs, cfgs);
+        applyTshirtTexture(model, textures, configs);
+      },
+      setEditingMode(part) {
+        isEditing = !!part;
+        currentPart = part;
+        currentTexConfig = part ? configs[part] : null;
+        controls.enabled = !isEditing;
+        if (isEditing) controls.autoRotate = false;
+      },
       setAutoRotate(v) { controls.autoRotate = v; if (!v) pauseUntil = Infinity; else pauseUntil = 0; },
       zoomIn() { controls.dollyIn(1.2); controls.update(); },
       zoomOut() { controls.dollyOut(1.2); controls.update(); },
