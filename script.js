@@ -66,25 +66,17 @@ function loadAvatarModel() {
   return gltfPromise;
 }
 
-// ============ APLICAR TEXTURAS SEPARADAS ============
 function applyTshirtTexture(root, textures, configs) {
   root.traverse(child => {
     if (!child.isMesh) return;
     const nome = child.name.toLowerCase();
     
     let tex = null, cfg = null;
-
-    if (nome.includes('body_front')) {
-      tex = textures.frente; cfg = configs.frente;
-    } else if (nome.includes('body_back')) {
-      tex = textures.costas; cfg = configs.costas;
-    } else if (nome.includes('sleeves')) {
-      tex = textures.manga; cfg = configs.manga;
-    } else if (nome.includes('ribbing')) {
-      tex = textures.gola; cfg = configs.gola;
-    } else {
-      return; // Não é camisa
-    }
+    if (nome.includes('body_front')) { tex = textures.frente; cfg = configs.frente; }
+    else if (nome.includes('body_back')) { tex = textures.costas; cfg = configs.costas; }
+    else if (nome.includes('sleeves')) { tex = textures.manga; cfg = configs.manga; }
+    else if (nome.includes('ribbing')) { tex = textures.gola; cfg = configs.gola; }
+    else { return; }
 
     const mats = Array.isArray(child.material) ? child.material : [child.material];
     mats.forEach(mat => {
@@ -93,21 +85,21 @@ function applyTshirtTexture(root, textures, configs) {
       mat.side = THREE.DoubleSide;
 
       if (tex) {
-        tex.center.set(0.5, 0.5);
+        // Centraliza a textura perfeitamente antes de aplicar o zoom/posição
+        tex.center.set(0.5, 0.5); 
         tex.repeat.set(cfg.scale || 1, cfg.scale || 1);
         tex.offset.set(cfg.x || 0, cfg.y || 0);
         mat.map = tex;
         mat.color.setHex(0xffffff);
       } else {
         mat.map = null;
-        mat.color.set(0xffffff); // fallback se não tiver imagem
+        mat.color.set(0xffffff);
       }
       mat.needsUpdate = true;
     });
   });
 }
 
-// ============ CRIAR VIEWER ============
 async function createViewer(el, cam, options = {}) {
   const w = el.clientWidth || 400;
   const h = el.clientHeight || 400;
@@ -123,7 +115,6 @@ async function createViewer(el, cam, options = {}) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   el.appendChild(renderer.domElement);
 
-  // Iluminação
   scene.add(new THREE.AmbientLight(0xffffff, 1.5));
   const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(2, 5, 4); scene.add(key);
   const fill = new THREE.DirectionalLight(0xffffff, 1.0); fill.position.set(-4, 3, 2); scene.add(fill);
@@ -151,7 +142,6 @@ async function createViewer(el, cam, options = {}) {
     wrapper.scale.setScalar(scaleFactor);
     wrapper.position.set(-center.x * scaleFactor, -box.min.y * scaleFactor, -center.z * scaleFactor);
 
-    // Carrega Texturas (Frente, Costas, Manga, Gola)
     const textures = {
       frente: await loadTexture(cam.textura_principal, cam.cor_base),
       costas: await loadTexture(cam.textura_costas, cam.cor_base),
@@ -179,19 +169,15 @@ async function createViewer(el, cam, options = {}) {
     controls.autoRotate = options.autoRotate !== false;
     controls.autoRotateSpeed = 1.5;
 
-    // Lógica para edição via mouse (Arrastar e Scroll)
     let isEditing = false;
     let currentPart = null;
     let currentTexConfig = null;
-    
-    // Eventos para manipular textura no painel
-    el.addEventListener('mousedown', (e) => { if (isEditing) e.stopPropagation(); }, true);
     
     let isDragging = false;
     let prevX = 0, prevY = 0;
 
     renderer.domElement.addEventListener('pointerdown', (e) => {
-      if (isEditing && e.button === 0) {
+      if (isEditing && e.button === 0) { // Botão Esquerdo
         isDragging = true; prevX = e.clientX; prevY = e.clientY;
         controls.enabled = false;
       }
@@ -199,6 +185,7 @@ async function createViewer(el, cam, options = {}) {
 
     window.addEventListener('pointermove', (e) => {
       if (isDragging && isEditing) {
+        // Move a textura com base no movimento do mouse
         const dx = (e.clientX - prevX) * 0.005;
         const dy = (e.clientY - prevY) * 0.005;
         prevX = e.clientX; prevY = e.clientY;
@@ -209,7 +196,6 @@ async function createViewer(el, cam, options = {}) {
         currentTexConfig.y = Math.max(-2, Math.min(2, currentTexConfig.y));
         
         applyTshirtTexture(model, textures, configs);
-        if (window.__adminOnTextureChange) window.__adminOnTextureChange(currentPart, currentTexConfig);
       }
     });
 
@@ -220,13 +206,14 @@ async function createViewer(el, cam, options = {}) {
     renderer.domElement.addEventListener('wheel', (e) => {
       if (isEditing) {
         e.preventDefault(); 
+        e.stopPropagation();
+        // Inverte o scroll para ficar intuitivo (scroll up = aumenta)
         const factor = e.deltaY > 0 ? -0.05 : 0.05;
         currentTexConfig.scale += factor;
         currentTexConfig.scale = Math.max(0.1, Math.min(5, currentTexConfig.scale));
         applyTshirtTexture(model, textures, configs);
-        if (window.__adminOnTextureChange) window.__adminOnTextureChange(currentPart, currentTexConfig);
       }
-    }, { passive: false });
+    }, { passive: false, capture: true });
 
     let animId;
     function animate() {
@@ -267,7 +254,8 @@ async function createViewer(el, cam, options = {}) {
         isEditing = !!part;
         currentPart = part;
         currentTexConfig = part ? configs[part] : null;
-        controls.enabled = !isEditing;
+        // Desativa rotação enquanto edita, permite Zoom global se quiser, mas travamos o mouse para arrastar
+        controls.enabled = !isEditing; 
         if (isEditing) controls.autoRotate = false;
       },
       setAutoRotate(v) { controls.autoRotate = v; if (!v) pauseUntil = Infinity; else pauseUntil = 0; },
