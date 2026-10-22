@@ -297,7 +297,7 @@ async function createViewer(el, cam, options = {}) {
 }
 window.__createViewer = createViewer;
 
-// ============ HERO VIEWER (CARROSSEL CONTROLADO) ============
+// ============ HERO VIEWER (COREOGRAFIA PERFEITA) ============
 async function initHeroViewer() {
   const el = document.getElementById('heroViewer');
   if (!el || state.camisetas.length === 0) return;
@@ -313,7 +313,7 @@ async function initHeroViewer() {
   renderer.setSize(w, h);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.domElement.style.pointerEvents = 'none'; // BLOQUEIO TOTAL DO MOUSE NO HERO
+  renderer.domElement.style.pointerEvents = 'none'; // BLOQUEIO TOTAL DO MOUSE
   
   el.appendChild(renderer.domElement);
 
@@ -334,7 +334,6 @@ async function initHeroViewer() {
     const { wrapper } = await buildMannequin(state.camisetas[i]);
     const angle = (i / totalModels) * Math.PI * 2;
     wrapper.position.set(Math.sin(angle) * radius, 0, Math.cos(angle) * radius);
-    wrapper.rotation.y = -angle; // Compensa a posição circular para já nascer de frente
     carouselGroup.add(wrapper);
     wrappers.push(wrapper);
   }
@@ -353,39 +352,31 @@ async function initHeroViewer() {
   function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
-    const t = clock.getElapsedTime();
-
     phaseTimer += delta;
 
-    // GERENCIAMENTO DAS FASES
+    // CONTROLE DE TEMPO E ANIMAÇÕES
     if (statePhase === 'turning_back') {
-      // Gira o modelo atual no próprio eixo até 180 graus (mostrar as costas)
-      extraSpinAngle = Math.min(Math.PI, extraSpinAngle + delta * 2.0); 
+      extraSpinAngle = Math.min(Math.PI, extraSpinAngle + delta * 2.5); 
       if (extraSpinAngle >= Math.PI) { statePhase = 'pausing_back'; phaseTimer = 0; }
     } 
     else if (statePhase === 'pausing_back') {
-      // Pausa de 1.5s mostrando as costas
-      if (phaseTimer > 1.5) { statePhase = 'turning_front'; }
+      if (phaseTimer > 2.0) { statePhase = 'turning_front'; } // 2 segundos olhando as costas
     }
     else if (statePhase === 'turning_front') {
-      // Gira de volta para a frente (0 graus)
-      extraSpinAngle = Math.max(0, extraSpinAngle - delta * 2.0);
+      extraSpinAngle = Math.max(0, extraSpinAngle - delta * 2.5);
       if (extraSpinAngle <= 0) { statePhase = 'pausing_front'; phaseTimer = 0; }
     }
     else if (statePhase === 'pausing_front') {
-      // Pausa de 1s mostrando a frente
-      if (phaseTimer > 1.0) {
+      if (phaseTimer > 1.0) { // 1 segundo olhando a frente
         statePhase = 'moving_carousel';
         targetCarouselAngle = -((currentIndex + 1) / totalModels) * Math.PI * 2;
       }
     }
     else if (statePhase === 'moving_carousel') {
-      // O carrossel gira suavemente para o próximo
-      const smoothFactor = 1 - Math.exp(-4.0 * delta); 
+      const smoothFactor = 1 - Math.exp(-3.0 * delta); 
       currentCarouselAngle += (targetCarouselAngle - currentCarouselAngle) * smoothFactor;
       
       if (Math.abs(targetCarouselAngle - currentCarouselAngle) < 0.01) {
-        // Finaliza a troca
         currentCarouselAngle = targetCarouselAngle;
         currentIndex = (currentIndex + 1) % totalModels;
         statePhase = 'turning_back';
@@ -394,20 +385,16 @@ async function initHeroViewer() {
       }
     }
 
-    // APLICA AS ROTAÇÕES NO GRUPO E NOS MODELOS
+    // APLICA AS ROTAÇÕES
     carouselGroup.rotation.y = currentCarouselAngle;
     
     wrappers.forEach((w, i) => {
-      const angleOffset = (i / totalModels) * Math.PI * 2;
-      // Compensa a rotação do carrossel para ficar de frente
-      const camCompensation = -currentCarouselAngle - angleOffset;
-      
       if (i === currentIndex) {
-        // O modelo que está na frente executa o giro individual (mostra as costas)
-        w.rotation.y = camCompensation + extraSpinAngle;
+        // O manequim ativo gira no próprio eixo
+        w.rotation.y = extraSpinAngle;
       } else {
-        // Os modelos que estão atrás apenas olham para frente
-        w.rotation.y = camCompensation;
+        // Os manequins inativos ficam travados olhando para a câmera (100% de precisão)
+        w.lookAt(camera.position.x, w.position.y, camera.position.z);
       }
     });
 
