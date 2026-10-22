@@ -110,14 +110,14 @@ function applyTshirtTexture(root, texture) {
   });
 }
 
-// ============ CRIAR VIEWER COM AUTO-FIT ============
+// ============ CRIAR VIEWER COM AUTO-FIT A PROVA DE BALAS ============
 async function createViewer(el, cam, options = {}) {
   const w = el.clientWidth || 400;
   const h = el.clientHeight || 400;
 
   const scene = new THREE.Scene();
-  // Câmera inicial (será reposicionada após carregar o modelo)
   const camera = new THREE.PerspectiveCamera(45, w/h, 0.1, 1000);
+  camera.position.set(0, 1.0, 3.5); // Câmera inicial segura
 
   const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
   renderer.setSize(w, h);
@@ -125,47 +125,64 @@ async function createViewer(el, cam, options = {}) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   el.appendChild(renderer.domElement);
 
-  // Iluminação de Estúdio
-  scene.add(new THREE.AmbientLight(0xffffff, 1.2));
-  const key = new THREE.DirectionalLight(0xffffff, 2.5); key.position.set(2, 5, 4); scene.add(key);
-  const fill = new THREE.DirectionalLight(0xffffff, 1.5); fill.position.set(-4, 3, 2); scene.add(fill);
-  const rim = new THREE.DirectionalLight(0xd4af37, 2.0); rim.position.set(0, 2, -5); scene.add(rim);
+  // Iluminação
+  scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+  const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(2, 5, 4); scene.add(key);
+  const fill = new THREE.DirectionalLight(0xffffff, 1.0); fill.position.set(-4, 3, 2); scene.add(fill);
+  const rim = new THREE.DirectionalLight(0xd4af37, 1.5); rim.position.set(0, 2, -5); scene.add(rim);
 
   try {
     const originalModel = await loadAvatarModel();
+    
+    // === O SEGREDO ESTÁ AQUI ===
+    // Em vez de clonar direto, nós criamos um novo Group e jogamos o modelo dentro,
+    // ignorando todas as transformações esquisitas do FBX original.
+    const modelWrapper = new THREE.Group();
     const model = originalModel.clone(true);
     
-    // 1. CALCULA O TAMANHO REAL DO MODELO
+    // Reseta rotação e posição do modelo bruto
+    model.position.set(0, 0, 0);
+    model.rotation.set(0, 0, 0);
+    model.scale.set(1, 1, 1);
+
+    modelWrapper.add(model);
+    
+    // Força a matriz para atualizar as posições reais
+    modelWrapper.updateMatrixWorld(true);
+
+    // Agora sim, calcula o tamanho real do modelo do zero
     const box = new THREE.Box3().setFromObject(model);
     const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
 
-    // 2. NORMALIZA A ESCALA (Força o modelo a ter 2 metros de altura)
+    // Normaliza para 2 metros de altura
     const targetHeight = 2.0;
     const scaleFactor = targetHeight / size.y;
     model.scale.setScalar(scaleFactor);
-    
-    // 3. REPOSICIONA PARA O CENTRO DO CHÃO (Y = 0)
+
+    // Centraliza no eixo X e Z, e cola no chão no eixo Y
     model.position.x = -center.x * scaleFactor;
     model.position.z = -center.z * scaleFactor;
-    model.position.y = -box.min.y * scaleFactor; // Base do modelo toca o chão
+    model.position.y = -box.min.y * scaleFactor; 
+
+    modelWrapper.updateMatrixWorld(true);
 
     const tex = await loadTexture(cam.textura_principal, cam.cor_base);
     applyTshirtTexture(model, tex);
-    scene.add(model);
 
-    // 4. AJUSTA A CÂMERA AUTOMATICAMENTE
+    scene.add(modelWrapper);
+
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     
-    // Foca no peito do modelo (metade da altura)
+    // Foca no peito do modelo
     controls.target.set(0, 1.2, 0);
     
-    // Coloca a câmera a uma distância segura
+    // Câmera a 3.5 metros de distância
     camera.position.set(0, 1.2, 3.5);
     controls.minDistance = 1.0;
-    controls.maxDistance = 10;
+    controls.maxDistance = 8;
     controls.enablePan = false;
     
     controls.autoRotate = options.autoRotate !== false;
