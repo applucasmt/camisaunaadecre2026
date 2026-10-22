@@ -4,12 +4,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbyMiP-nbR9_UYZGCA7dtAWIm4HIl2Vg4UeatogPC9f7ORdEZMSEJwU6LggDenh0eqDVug/exec';
-const state = { config: {}, camisetas: [], modalViewer: null };
+const state = { config: {}, camisetas: [], modalViewer: null, isAdminLogado: false, adminViewer: null };
 window.__state = state;
 window.THREE = THREE;
 
 // ==========================================
-// HELPERS E CORS CORRIGIDO
+// HELPERS E CORS (CORRIGIDO)
 // ==========================================
 function toast(msg, isError = false) {
   let el = document.getElementById('toast') || document.createElement('div');
@@ -22,28 +22,21 @@ function toast(msg, isError = false) {
 window.__toast = toast;
 
 async function apiGet(action = 'getAll') {
-  try { 
-    const r = await fetch(`${API_URL}?action=${action}`); 
-    return await r.json(); 
-  } catch (e) { return { ok: false }; }
+  try { const r = await fetch(`${API_URL}?action=${action}`); return await r.json(); } 
+  catch (e) { return { ok: false }; }
 }
 
 async function apiPost(payload) {
   try {
-    // SOLUÇÃO CORS: Enviar como form-urlencoded para o Google Apps Script aceitar
     const formData = new URLSearchParams();
     formData.append('payload', JSON.stringify(payload));
-
     const r = await fetch(API_URL, {
       method: 'POST',
       body: formData.toString(),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' }
     });
     return await r.json();
-  } catch (e) { 
-    console.error("Erro POST:", e);
-    return { ok: false }; 
-  }
+  } catch (e) { return { ok: false }; }
 }
 window.__apiPost = apiPost;
 
@@ -82,7 +75,7 @@ async function loadTexture(url, fallbackColor) {
 window.__loadTexture = loadTexture;
 
 // ==========================================
-// MODELO 3D BASE
+// MODELO 3D
 // ==========================================
 const WHITE_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 let gltfPromise = null;
@@ -222,7 +215,448 @@ async function buildMannequin(cam) {
 }
 
 // ==========================================
-// EXPORTA O CRIADOR DO PREVIEW PARA O ADMIN.JS
+// INICIALIZAÇÃO DO SITE E SCROLL
+// ==========================================
+async function initApp() {
+  const data = await apiGet('getAll');
+  if (data.ok) {
+    state.config = Object.fromEntries(data.config.map(c => [c.CHAVE, c.VALOR]));
+    state.camisetas = data.camisetas;
+    if(state.camisetas[0]) { 
+      const el1 = document.getElementById('nome-1'); if(el1) el1.textContent = state.camisetas[0].nome; 
+      const ed1 = document.getElementById('desc-1'); if(ed1) ed1.textContent = state.camisetas[0].descricao; 
+    }
+    if(state.camisetas[1]) { 
+      const el2 = document.getElementById('nome-2'); if(el2) el2.textContent = state.camisetas[1].nome; 
+      const ed2 = document.getElementById('desc-2'); if(ed2) ed2.textContent = state.camisetas[1].descricao; 
+    }
+    if(state.camisetas[2]) { 
+      const el3 = document.getElementById('nome-3'); if(el3) el3.textContent = state.camisetas[2].nome; 
+      const ed3 = document.getElementById('desc-3'); if(ed3) ed3.textContent = state.camisetas[2].descricao; 
+    }
+  } else {
+    state.camisetas = [
+      { id: 1, nome: 'Classic Black', descricao: 'Algodão premium penteado 30.1.', cor_base: '#111111', cor_corpo: '#e0e0e0', cor_calca: '#1a1a1a' },
+      { id: 2, nome: 'Urban White', descricao: 'Modelagem oversized com toque suave.', cor_base: '#f5f5f5', cor_corpo: '#d4d4d4', cor_calca: '#2a2a2a' },
+      { id: 3, nome: 'Gold Edition', descricao: 'Edição limitada com detalhes em dourado.', cor_base: '#d4af37', cor_corpo: '#c0c0c0', cor_calca: '#000000' }
+    ];
+  }
+
+  const container = document.getElementById('webgl-container');
+  const scene = new THREE.Scene();
+  
+  const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
+  camera.position.set(0, 1.3, 3.8); 
+  camera.lookAt(0, 1.0, 0);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  container.appendChild(renderer.domElement);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+  const key = new THREE.DirectionalLight(0xffffff, 2.5); key.position.set(3, 6, 5); scene.add(key);
+  const fill = new THREE.DirectionalLight(0xffffff, 1.2); fill.position.set(-5, 3, 3); scene.add(fill);
+  const rim = new THREE.DirectionalLight(0xd4af37, 2.0); rim.position.set(0, 3, -6); scene.add(rim);
+  const bottom = new THREE.DirectionalLight(0xffffff, 0.5); bottom.position.set(0, -3, 2); scene.add(bottom);
+
+  const modelsData = [];
+  const totalModels = Math.min(3, state.camisetas.length);
+  const spacing = 3.5;
+
+  for (let i = 0; i < totalModels; i++) {
+    const { wrapper, spinner } = await buildMannequin(state.camisetas[i]);
+    
+    if (i === 0) wrapper.position.set(0, 0, 0); 
+    if (i === 1) wrapper.position.set(spacing, 0, 0); 
+    if (i === 2) wrapper.position.set(-spacing, 0, 0); 
+    
+    scene.add(wrapper);
+    modelsData.push({ wrapper, spinner, index: i });
+  }
+
+  const camState = { y: 1.3, z: 3.8 };
+  const lookState = { y: 1.0 };
+
+  function updateCamera() {
+    camera.position.y = THREE.MathUtils.lerp(camera.position.y, camState.y, 0.1);
+    camera.position.z = THREE.MathUtils.lerp(camera.position.z, camState.z, 0.1);
+    camera.lookAt(0, lookState.y, 0);
+    requestAnimationFrame(updateCamera);
+  }
+  updateCamera();
+
+  if (window.gsap && window.ScrollTrigger) {
+    gsap.registerPlugin(ScrollTrigger);
+
+    ScrollTrigger.create({ trigger: "#s2", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
+      const p = self.progress;
+      camState.z = THREE.MathUtils.lerp(3.8, 2.0, p); 
+      camState.y = THREE.MathUtils.lerp(1.3, 1.4, p); 
+      lookState.y = THREE.MathUtils.lerp(1.0, 1.3, p); 
+    }});
+
+    ScrollTrigger.create({ trigger: "#s3", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
+      modelsData[0].spinner.rotation.y = THREE.MathUtils.lerp(0, Math.PI, self.progress);
+    }});
+
+    ScrollTrigger.create({ trigger: "#s4", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
+      const p = self.progress;
+      modelsData[0].wrapper.position.x = THREE.MathUtils.lerp(0, spacing, p);
+      if(modelsData[1]) modelsData[1].wrapper.position.x = THREE.MathUtils.lerp(spacing, 0, p);
+      modelsData[0].spinner.rotation.y = THREE.MathUtils.lerp(Math.PI, 0, p);
+    }});
+
+    ScrollTrigger.create({ trigger: "#s5", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
+      if(modelsData[1]) modelsData[1].spinner.rotation.y = THREE.MathUtils.lerp(0, Math.PI, self.progress);
+    }});
+
+    ScrollTrigger.create({ trigger: "#s6", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
+      const p = self.progress;
+      if(modelsData[1]) modelsData[1].wrapper.position.x = THREE.MathUtils.lerp(0, spacing, p);
+      if(modelsData[2]) modelsData[2].wrapper.position.x = THREE.MathUtils.lerp(-spacing, 0, p);
+      if(modelsData[1]) modelsData[1].spinner.rotation.y = THREE.MathUtils.lerp(Math.PI, 0, p);
+    }});
+
+    ScrollTrigger.create({ trigger: "#s7", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
+      if(modelsData[2]) modelsData[2].spinner.rotation.y = THREE.MathUtils.lerp(0, Math.PI, self.progress);
+    }});
+
+    gsap.utils.toArray('.content-box').forEach(box => {
+      ScrollTrigger.create({
+        trigger: box, start: "top 80%",
+        onEnter: () => box.classList.add('visible'),
+        onLeaveBack: () => box.classList.remove('visible')
+      });
+    });
+  }
+
+  const popup = document.getElementById('scrollPopup');
+  if (popup) {
+    window.addEventListener('scroll', () => {
+      if (window.scrollY > 50) popup.classList.add('hidden');
+      else popup.classList.remove('hidden');
+    });
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    if (window.ScrollTrigger) ScrollTrigger.refresh();
+  });
+
+  // Inicializa o Painel Administrativo
+  initAdminPanel();
+}
+
+// ==========================================
+// PAINEL ADMINISTRATIVO EMBUTIDO (O CADEADO)
+// ==========================================
+function initAdminPanel() {
+  const lockBtn = document.getElementById('lockBtn');
+  const loginModal = document.getElementById('loginModal');
+  const adminPanel = document.getElementById('adminPanel');
+
+  // FORÇA O CLIQUE A SER CAPTURADO
+  if (lockBtn) {
+    lockBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      if (state.isAdminLogado) {
+        adminPanel.classList.add('active');
+        renderAdminSidebar(); 
+        openAdminTab('config');
+      } else {
+        loginModal.classList.add('active');
+        const input = document.getElementById('senhaInput');
+        if (input) input.focus();
+      }
+    });
+  }
+
+  document.querySelectorAll('[data-close]').forEach(b => {
+    b.addEventListener('click', () => loginModal.classList.remove('active'));
+  });
+
+  const loginBtn = document.getElementById('loginBtn');
+  if (loginBtn) {
+    loginBtn.addEventListener('click', () => {
+      const senha = document.getElementById('senhaInput').value.trim();
+      const senhaCorreta = String(state.config.admin_senha || '20266');
+      
+      if (senha === senhaCorreta) {
+        state.isAdminLogado = true;
+        loginModal.classList.remove('active');
+        adminPanel.classList.add('active');
+        renderAdminSidebar(); 
+        openAdminTab('config');
+        toast('Bem-vindo, Admin!', false);
+      } else {
+        const err = document.getElementById('loginError');
+        if (err) {
+          err.textContent = 'Senha incorreta';
+          setTimeout(() => err.textContent = '', 2500);
+        }
+      }
+    });
+  }
+
+  const closeAdmin = document.getElementById('closeAdmin');
+  if (closeAdmin) {
+    closeAdmin.addEventListener('click', () => {
+      adminPanel.classList.remove('active');
+      destroyAdminPreview();
+    });
+  }
+
+  function renderAdminSidebar() {
+    const sidebar = document.getElementById('adminSidebar');
+    sidebar.innerHTML = '';
+    [{ id:'config', label:'⚙️ Textos' }, { id:'camisetas', label:'👕 Modelos' }].forEach(t => {
+      const btn = document.createElement('button');
+      btn.textContent = t.label; btn.dataset.tab = t.id;
+      btn.onclick = () => openAdminTab(t.id); 
+      sidebar.appendChild(btn);
+    });
+  }
+
+  function openAdminTab(tabId) {
+    document.querySelectorAll('#adminSidebar button').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
+    const content = document.getElementById('adminContent');
+    content.innerHTML = ''; 
+    destroyAdminPreview();
+    
+    if (tabId === 'config') renderConfigTab(content);
+    if (tabId === 'camisetas') renderCamisetasTab(content);
+  }
+
+  function renderConfigTab(container) {
+    const c = state.config;
+    container.innerHTML = `
+      <h2 style="margin-bottom:24px;">Textos</h2>
+      <div class="admin-form" id="configForm">
+        <div><label>Título do Site</label><input name="titulo_site" value="${c.titulo_site || ''}"></div>
+        <div><label>Senha do Admin</label><input name="admin_senha" value="${c.admin_senha || ''}"></div>
+        <button class="btn-primary" id="saveConfigBtn">Salvar Configurações</button>
+      </div>
+    `;
+    document.getElementById('saveConfigBtn').onclick = async () => {
+      const dados = {}; 
+      document.querySelectorAll('#configForm input').forEach(i => dados[i.name] = i.value);
+      const r = await apiPost({ action:'updateConfig', senha: c.admin_senha || '20266', dados });
+      if (r.ok) { Object.assign(state.config, dados); toast('Salvo!', false); }
+      else toast('Erro', true);
+    };
+  }
+
+  function renderCamisetasTab(container) {
+    container.innerHTML = `
+      <h2 style="margin-bottom:24px;">Modelos Cadastrados</h2>
+      <div style="display:grid;gap:16px;">
+        ${state.camisetas.map(c => `
+          <div style="border:1px solid var(--border);border-radius:12px;padding:20px;display:flex;gap:20px;align-items:center;">
+            <div style="flex:1;">
+              <strong style="display:block; font-size:1.1rem;">${c.nome}</strong>
+              <span style="font-size:0.85rem; color:var(--text-dim);">${c.descricao || 'Sem descrição'}</span>
+            </div>
+            <button class="btn-ghost" data-tex="${c.id}">Configurar 3D</button>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    container.querySelectorAll('[data-tex]').forEach(b => 
+      b.onclick = () => editCamisetaTexturas(parseInt(b.dataset.tex))
+    );
+  }
+
+  function editCamisetaTexturas(id) {
+    const c = state.camisetas.find(x => String(x.id) === String(id));
+    const content = document.getElementById('adminContent');
+    
+    const cBase = c.cor_base || '#ffffff';
+    const cCorpo = c.cor_corpo || '#e0e0e0';
+    const cCabelo = c.cor_cabelo || '#333333';
+    const cCalca = c.cor_calca || '#1a1a1a';
+    const cSapato = c.cor_sapato || '#ffffff';
+
+    content.innerHTML = `
+      <h2>Configurar: ${c.nome}</h2>
+      
+      <div style="background: #1a1a1a; border: 1px solid var(--accent); padding: 16px; border-radius: 12px; margin-bottom: 24px; display:flex; gap:20px; align-items:center;">
+        <div style="font-size: 24px;">🖱️</div>
+        <div style="flex:1; font-size:0.9rem; line-height:1.4;">
+          <strong style="color:var(--accent);">Controles Interativos:</strong><br>
+          <b>Botão Esquerdo (Arrastar):</b> Move a textura.<br>
+          <b>Scroll do Mouse:</b> Zoom na textura.<br>
+          <b>Botão Direito:</b> Gira o manequim.
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
+        
+        <div class="admin-form">
+          
+          <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+            <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Frente</h3>
+            <div><label>URL / Base64</label><input type="text" id="urlFrente" value="${c.textura_principal || ''}"></div>
+            <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileFrente" accept="image/*"></div>
+          </div>
+
+          <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+            <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Costas</h3>
+            <div><label>URL / Base64</label><input type="text" id="urlCostas" value="${c.textura_costas || ''}"></div>
+            <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileCostas" accept="image/*"></div>
+          </div>
+
+          <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+            <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Mangas</h3>
+            <div><label>URL / Base64</label><input type="text" id="urlManga" value="${c.textura_manga || ''}"></div>
+            <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileManga" accept="image/*"></div>
+          </div>
+
+          <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+            <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Gola</h3>
+            <div><label>URL / Base64</label><input type="text" id="urlGola" value="${c.textura_gola || ''}"></div>
+            <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileGola" accept="image/*"></div>
+          </div>
+
+          <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
+            <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Cores do Manequim</h3>
+            <div style="display:flex; gap:8px; margin-bottom:8px;">
+              <div style="flex:1"><label>Corpo</label><input type="color" id="corCorpo" value="${cCorpo}" style="height:40px; padding:4px; cursor:pointer; width:100%"></div>
+              <div style="flex:1"><label>Cabelo</label><input type="color" id="corCabelo" value="${cCabelo}" style="height:40px; padding:4px; cursor:pointer; width:100%"></div>
+              <div style="flex:1"><label>Calça</label><input type="color" id="corCalca" value="${cCalca}" style="height:40px; padding:4px; cursor:pointer; width:100%"></div>
+              <div style="flex:1"><label>Sapato</label><input type="color" id="corSapato" value="${cSapato}" style="height:40px; padding:4px; cursor:pointer; width:100%"></div>
+            </div>
+            <div><label>Cor Base (Fundo)</label><input type="color" id="corBase" value="${cBase}" style="height:40px; padding:4px; cursor:pointer; width:100%"></div>
+          </div>
+
+          <button class="btn-primary" id="saveCamisetaBtn" style="margin-top:10px;">Salvar Alterações</button>
+          <button class="btn-ghost" id="backTexBtn">← Voltar</button>
+        </div>
+
+        <div>
+          <div class="preview-3d" id="adminPreview" style="height: 100%; min-height: 500px; background: #000; border-radius:12px; overflow:hidden;"></div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('backTexBtn').onclick = () => { 
+      destroyAdminPreview(); 
+      openAdminTab('camisetas'); 
+    };
+
+    initAdminPreview(c).then(() => {
+      if(!state.adminViewer) return;
+
+      ['corCorpo', 'corCabelo', 'corCalca', 'corSapato'].forEach(id => {
+        document.getElementById(id).oninput = () => {
+          state.adminViewer.setColors({
+            corpo: document.getElementById('corCorpo').value,
+            cabelo: document.getElementById('corCabelo').value,
+            calca: document.getElementById('corCalca').value,
+            sapato: document.getElementById('corSapato').value
+          });
+        };
+      });
+
+      document.getElementById('corBase').oninput = () => {
+        state.adminViewer.setTextures(null, null, null, null, state.adminViewer.getConfigs(), document.getElementById('corBase').value);
+      };
+
+      const handleUpload = async (e, inputId, textureKey) => {
+        const file = e.target.files[0];
+        if (file) {
+          const base64 = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result);
+          });
+          document.getElementById(inputId).value = base64; 
+          
+          loadTexture(base64, c.cor_base).then(t => {
+            const args = { frente: [t, null, null, null], costas: [null, t, null, null], manga: [null, null, t, null], gola: [null, null, null, t] }[textureKey];
+            state.adminViewer.setTextures(...args, state.adminViewer.getConfigs(), document.getElementById('corBase').value);
+          });
+        }
+      };
+
+      document.getElementById('fileFrente').onchange = (e) => handleUpload(e, 'urlFrente', 'frente');
+      document.getElementById('fileCostas').onchange = (e) => handleUpload(e, 'urlCostas', 'costas');
+      document.getElementById('fileManga').onchange = (e) => handleUpload(e, 'urlManga', 'manga');
+      document.getElementById('fileGola').onchange = (e) => handleUpload(e, 'urlGola', 'gola');
+
+      const handleUrl = (e, textureKey) => {
+        loadTexture(e.target.value, c.cor_base).then(t => {
+          const args = { frente: [t, null, null, null], costas: [null, t, null, null], manga: [null, null, t, null], gola: [null, null, null, t] }[textureKey];
+          state.adminViewer.setTextures(...args, state.adminViewer.getConfigs(), document.getElementById('corBase').value);
+        });
+      };
+      document.getElementById('urlFrente').onchange = (e) => handleUrl(e, 'frente');
+      document.getElementById('urlCostas').onchange = (e) => handleUrl(e, 'costas');
+      document.getElementById('urlManga').onchange = (e) => handleUrl(e, 'manga');
+      document.getElementById('urlGola').onchange = (e) => handleUrl(e, 'gola');
+
+      document.getElementById('saveCamisetaBtn').onclick = async () => {
+        const cfgFrente = state.adminViewer.getConfigs().frente;
+        const cfgCostas = state.adminViewer.getConfigs().costas;
+        const cfgManga = state.adminViewer.getConfigs().manga;
+        const cfgGola = state.adminViewer.getConfigs().gola;
+        
+        const dados = {
+          textura_principal: document.getElementById('urlFrente').value,
+          textura_costas: document.getElementById('urlCostas').value,
+          textura_manga: document.getElementById('urlManga').value,
+          textura_gola: document.getElementById('urlGola').value,
+          x_frente: cfgFrente.x, y_frente: cfgFrente.y, scale_frente: cfgFrente.scale,
+          x_costas: cfgCostas.x, y_costas: cfgCostas.y, scale_costas: cfgCostas.scale,
+          x_manga: cfgManga.x, y_manga: cfgManga.y, scale_manga: cfgManga.scale,
+          x_gola: cfgGola.x, y_gola: cfgGola.y, scale_gola: cfgGola.scale,
+          cor_corpo: document.getElementById('corCorpo').value,
+          cor_cabelo: document.getElementById('corCabelo').value,
+          cor_calca: document.getElementById('corCalca').value,
+          cor_sapato: document.getElementById('corSapato').value,
+          cor_base: document.getElementById('corBase').value
+        };
+        const r = await apiPost({ action:'updateCamiseta', senha: state.config.admin_senha || '20266', id: c.id, dados });
+        if (r.ok) {
+          Object.assign(c, dados);
+          toast('Modelo salvo com sucesso!', false);
+        } else {
+          toast('Erro ao salvar.', true);
+        }
+      };
+    });
+  }
+
+  async function initAdminPreview(cam) {
+    const el = document.getElementById('adminPreview'); 
+    destroyAdminPreview(); 
+    await new Promise(r => setTimeout(r, 60));
+    state.adminViewer = await createAdminViewer(el, cam);
+  }
+
+  function destroyAdminPreview() { 
+    if (state.adminViewer) { 
+      state.adminViewer.destroy(); 
+      state.adminViewer = null; 
+    } 
+  }
+}
+
+// ==========================================
+// CRIADOR DO PREVIEW 3D DO ADMIN
 // ==========================================
 async function createAdminViewer(el, cam) {
   const w = el.clientWidth || 400;
@@ -411,10 +845,9 @@ async function createAdminViewer(el, cam) {
     return null;
   }
 }
-window.__createViewer = createAdminViewer; 
 
 // ==========================================
-// CARREGAMENTO SEGURO DO GSAP
+// CARREGAMENTO DO GSAP E BOOT
 // ==========================================
 function loadGSAP() {
   return new Promise((resolve, reject) => {
@@ -434,149 +867,10 @@ function loadGSAP() {
   });
 }
 
-// ==========================================
-// INICIALIZAÇÃO (SCROLLTELLING APPLE)
-// ==========================================
-async function initApp() {
-  gsap.registerPlugin(ScrollTrigger);
-  
-  const data = await apiGet('getAll');
-  if (data.ok) {
-    state.config = Object.fromEntries(data.config.map(c => [c.CHAVE, c.VALOR]));
-    state.camisetas = data.camisetas;
-    if(state.camisetas[0]) { 
-      const el1 = document.getElementById('nome-1'); if(el1) el1.textContent = state.camisetas[0].nome; 
-      const ed1 = document.getElementById('desc-1'); if(ed1) ed1.textContent = state.camisetas[0].descricao; 
-    }
-    if(state.camisetas[1]) { 
-      const el2 = document.getElementById('nome-2'); if(el2) el2.textContent = state.camisetas[1].nome; 
-      const ed2 = document.getElementById('desc-2'); if(ed2) ed2.textContent = state.camisetas[1].descricao; 
-    }
-    if(state.camisetas[2]) { 
-      const el3 = document.getElementById('nome-3'); if(el3) el3.textContent = state.camisetas[2].nome; 
-      const ed3 = document.getElementById('desc-3'); if(ed3) ed3.textContent = state.camisetas[2].descricao; 
-    }
-  } else {
-    state.camisetas = [
-      { id: 1, nome: 'Classic Black', descricao: 'Algodão premium penteado 30.1.', cor_base: '#111111', cor_corpo: '#e0e0e0', cor_calca: '#1a1a1a' },
-      { id: 2, nome: 'Urban White', descricao: 'Modelagem oversized com toque suave.', cor_base: '#f5f5f5', cor_corpo: '#d4d4d4', cor_calca: '#2a2a2a' },
-      { id: 3, nome: 'Gold Edition', descricao: 'Edição limitada com detalhes em dourado.', cor_base: '#d4af37', cor_corpo: '#c0c0c0', cor_calca: '#000000' }
-    ];
-  }
-
-  const container = document.getElementById('webgl-container');
-  const scene = new THREE.Scene();
-  
-  const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
-  camera.position.set(0, 1.3, 3.8); 
-  camera.lookAt(0, 1.0, 0);
-
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.2;
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  container.appendChild(renderer.domElement);
-
-  scene.add(new THREE.AmbientLight(0xffffff, 1.5));
-  const key = new THREE.DirectionalLight(0xffffff, 2.5); key.position.set(3, 6, 5); scene.add(key);
-  const fill = new THREE.DirectionalLight(0xffffff, 1.2); fill.position.set(-5, 3, 3); scene.add(fill);
-  const rim = new THREE.DirectionalLight(0xd4af37, 2.0); rim.position.set(0, 3, -6); scene.add(rim);
-  const bottom = new THREE.DirectionalLight(0xffffff, 0.5); bottom.position.set(0, -3, 2); scene.add(bottom);
-
-  const modelsData = [];
-  const totalModels = Math.min(3, state.camisetas.length);
-  const spacing = 3.5;
-
-  for (let i = 0; i < totalModels; i++) {
-    const { wrapper, spinner } = await buildMannequin(state.camisetas[i]);
-    
-    if (i === 0) wrapper.position.set(0, 0, 0); 
-    if (i === 1) wrapper.position.set(spacing, 0, 0); 
-    if (i === 2) wrapper.position.set(-spacing, 0, 0); 
-    
-    scene.add(wrapper);
-    modelsData.push({ wrapper, spinner, index: i });
-  }
-
-  const camState = { y: 1.3, z: 3.8 };
-  const lookState = { y: 1.0 };
-
-  function updateCamera() {
-    camera.position.y = THREE.MathUtils.lerp(camera.position.y, camState.y, 0.1);
-    camera.position.z = THREE.MathUtils.lerp(camera.position.z, camState.z, 0.1);
-    camera.lookAt(0, lookState.y, 0);
-    requestAnimationFrame(updateCamera);
-  }
-  updateCamera();
-
-  ScrollTrigger.create({ trigger: "#s2", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
-    const p = self.progress;
-    camState.z = THREE.MathUtils.lerp(3.8, 2.0, p); 
-    camState.y = THREE.MathUtils.lerp(1.3, 1.4, p); 
-    lookState.y = THREE.MathUtils.lerp(1.0, 1.3, p); 
-  }});
-
-  ScrollTrigger.create({ trigger: "#s3", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
-    modelsData[0].spinner.rotation.y = THREE.MathUtils.lerp(0, Math.PI, self.progress);
-  }});
-
-  ScrollTrigger.create({ trigger: "#s4", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
-    const p = self.progress;
-    modelsData[0].wrapper.position.x = THREE.MathUtils.lerp(0, spacing, p);
-    if(modelsData[1]) modelsData[1].wrapper.position.x = THREE.MathUtils.lerp(spacing, 0, p);
-    modelsData[0].spinner.rotation.y = THREE.MathUtils.lerp(Math.PI, 0, p);
-  }});
-
-  ScrollTrigger.create({ trigger: "#s5", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
-    if(modelsData[1]) modelsData[1].spinner.rotation.y = THREE.MathUtils.lerp(0, Math.PI, self.progress);
-  }});
-
-  ScrollTrigger.create({ trigger: "#s6", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
-    const p = self.progress;
-    if(modelsData[1]) modelsData[1].wrapper.position.x = THREE.MathUtils.lerp(0, spacing, p);
-    if(modelsData[2]) modelsData[2].wrapper.position.x = THREE.MathUtils.lerp(-spacing, 0, p);
-    if(modelsData[1]) modelsData[1].spinner.rotation.y = THREE.MathUtils.lerp(Math.PI, 0, p);
-  }});
-
-  ScrollTrigger.create({ trigger: "#s7", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
-    if(modelsData[2]) modelsData[2].spinner.rotation.y = THREE.MathUtils.lerp(0, Math.PI, self.progress);
-  }});
-
-  gsap.utils.toArray('.content-box').forEach(box => {
-    ScrollTrigger.create({
-      trigger: box, start: "top 80%",
-      onEnter: () => box.classList.add('visible'),
-      onLeaveBack: () => box.classList.remove('visible')
-    });
-  });
-
-  const popup = document.getElementById('scrollPopup');
-  if (popup) {
-    window.addEventListener('scroll', () => {
-      if (window.scrollY > 50) popup.classList.add('hidden');
-      else popup.classList.remove('hidden');
-    });
-  }
-
-  function animate() {
-    requestAnimationFrame(animate);
-    renderer.render(scene, camera);
-  }
-  animate();
-
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    ScrollTrigger.refresh();
-  });
-}
-
-// ==========================================
-// BOOT
-// ==========================================
 loadGSAP().then(() => {
   initApp();
-}).catch(err => console.error('Erro ao carregar GSAP:', err));
+}).catch(err => {
+  console.error('Erro ao carregar GSAP:', err);
+  // Mesmo sem GSAP, o site e o painel devem abrir
+  initApp();
+});
