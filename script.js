@@ -94,7 +94,6 @@ function loadAvatarModel() {
   );
   const loader = new GLTFLoader(manager);
   gltfPromise = new Promise((resolve, reject) => {
-    // Certifique-se de que o arquivo camisa.glb está na mesma pasta
     loader.load('./camisa.glb', gltf => resolve(gltf.scene), undefined, reject);
   });
   return gltfPromise;
@@ -232,9 +231,9 @@ async function initApp() {
   const container = document.getElementById('webgl-container');
   const scene = new THREE.Scene();
   
+  // CÂMERA INICIAL AJUSTADA: Mais perto (Z=3.8)
   const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
-  // Câmera inicial: Visão Geral (Hero) - Longe e alta
-  camera.position.set(0, 1.3, 6.0); 
+  camera.position.set(0, 1.3, 3.8); 
   camera.lookAt(0, 1.0, 0);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -258,7 +257,6 @@ async function initApp() {
   for (let i = 0; i < totalModels; i++) {
     const { wrapper, spinner } = await buildMannequin(state.camisetas[i]);
     
-    // Posicionamento lado a lado: Esquerda, Centro, Direita
     if (i === 0) wrapper.position.set(0, 0, 0); 
     if (i === 1) wrapper.position.set(spacing, 0, 0); 
     if (i === 2) wrapper.position.set(-spacing, 0, 0); 
@@ -267,8 +265,8 @@ async function initApp() {
     modelsData.push({ wrapper, spinner, index: i });
   }
 
-  // Variáveis de controle de câmera
-  const camState = { y: 1.3, z: 6.0 };
+  // Variáveis de controle de câmera (Zoom mais perto)
+  const camState = { y: 1.3, z: 3.8 };
   const lookState = { y: 1.0 };
 
   function updateCamera() {
@@ -280,21 +278,21 @@ async function initApp() {
   updateCamera();
 
   // ==========================================
-  // TIMELINE DO SCROLL (APPLE STYLE)
+  // TIMELINE DO SCROLL
   // ==========================================
 
-  // S1 -> S2: Zoom no Modelo 1 (Centro) e foco na cintura
+  // S1 -> S2: Zoom no Modelo 1 (Z cai de 3.8 para 2.0 - Muito perto!)
   ScrollTrigger.create({
     trigger: "#s2", start: "top bottom", end: "top top", scrub: 1,
     onUpdate: self => {
       const p = self.progress;
-      camState.z = THREE.MathUtils.lerp(6.0, 3.2, p); // Zoom In
-      camState.y = THREE.MathUtils.lerp(1.3, 1.4, p); // Sobe câmera
+      camState.z = THREE.MathUtils.lerp(3.8, 2.0, p); // Zoom In 2x
+      camState.y = THREE.MathUtils.lerp(1.3, 1.4, p); // Sobe um pouco
       lookState.y = THREE.MathUtils.lerp(1.0, 1.3, p); // Olha para o peito
     }
   });
 
-  // S2 -> S3: Modelo 1 gira 180 graus (mostra as costas)
+  // S2 -> S3: Modelo 1 gira 180 graus
   ScrollTrigger.create({
     trigger: "#s3", start: "top bottom", end: "top top", scrub: 1,
     onUpdate: self => {
@@ -303,17 +301,13 @@ async function initApp() {
     }
   });
 
-  // S3 -> S4: Transição (Modelo 1 sai, Modelo 2 entra no centro)
+  // S3 -> S4: Transição (Modelo 1 sai, Modelo 2 entra)
   ScrollTrigger.create({
     trigger: "#s4", start: "top bottom", end: "top top", scrub: 1,
     onUpdate: self => {
       const p = self.progress;
-      
-      // Move os modelos lateralmente
-      modelsData[0].wrapper.position.x = THREE.MathUtils.lerp(0, spacing, p); // Sai para a direita
-      if(modelsData[1]) modelsData[1].wrapper.position.x = THREE.MathUtils.lerp(spacing, 0, p); // Vem para o centro
-      
-      // Desvira o modelo 1
+      modelsData[0].wrapper.position.x = THREE.MathUtils.lerp(0, spacing, p);
+      if(modelsData[1]) modelsData[1].wrapper.position.x = THREE.MathUtils.lerp(spacing, 0, p);
       modelsData[0].spinner.rotation.y = THREE.MathUtils.lerp(Math.PI, 0, p);
     }
   });
@@ -327,15 +321,13 @@ async function initApp() {
     }
   });
 
-  // S5 -> S6: Transição (Modelo 2 sai, Modelo 3 entra no centro)
+  // S5 -> S6: Transição (Modelo 2 sai, Modelo 3 entra)
   ScrollTrigger.create({
     trigger: "#s6", start: "top bottom", end: "top top", scrub: 1,
     onUpdate: self => {
       const p = self.progress;
-      
-      modelsData[1].wrapper.position.x = THREE.MathUtils.lerp(0, spacing, p); // Sai para a direita
-      if(modelsData[2]) modelsData[2].wrapper.position.x = THREE.MathUtils.lerp(-spacing, 0, p); // Vem da esquerda para o centro
-      
+      modelsData[1].wrapper.position.x = THREE.MathUtils.lerp(0, spacing, p);
+      if(modelsData[2]) modelsData[2].wrapper.position.x = THREE.MathUtils.lerp(-spacing, 0, p);
       modelsData[1].spinner.rotation.y = THREE.MathUtils.lerp(Math.PI, 0, p);
     }
   });
@@ -371,10 +363,6 @@ async function initApp() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     ScrollTrigger.refresh();
   });
-
-  // Desativa o botão de admin antigo temporariamente para evitar bugs
-  const lockBtn = document.getElementById('lockBtn');
-  if (lockBtn) lockBtn.style.display = 'none'; 
 }
 
 initApp();
