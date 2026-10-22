@@ -299,7 +299,7 @@ async function createViewer(el, cam, options = {}) {
 }
 window.__createViewer = createViewer;
 
-// ============ HERO VIEWER (SLIDER LATERAL COM ZOOM GIGANTE) ============
+// ============ HERO VIEWER (SLIDER LATERAL COM 3 MANEQUINS FIXOS) ============
 async function initHeroViewer() {
   const el = document.getElementById('heroViewer');
   if (!el || state.camisetas.length === 0) return;
@@ -310,8 +310,8 @@ async function initHeroViewer() {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
   
-  // ZOOM EXTREMO: Câmera super perto (Z = 0.7) e alta (Y = 2.0)
-  camera.position.set(0, 2.0, 0.7); 
+  // Câmera fixa no centro e alta (Y=2.4) para focar na camisa e jogar o manequim pra cima
+  camera.position.set(0, 2.4, 3.5); 
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
@@ -326,17 +326,20 @@ async function initHeroViewer() {
   const fill = new THREE.DirectionalLight(0xffffff, 1.0); fill.position.set(-4, 3, 2); scene.add(fill);
   const rim = new THREE.DirectionalLight(0xd4af37, 1.5); rim.position.set(0, 2, -5); scene.add(rim);
 
+  const carouselGroup = new THREE.Group();
+  carouselGroup.position.y = -0.3;
+  scene.add(carouselGroup);
+
   const wrappers = [];
   const totalModels = Math.min(3, state.camisetas.length);
   
-  // ESPAÇAMENTO AUMENTADO: Para os 3 caberem na tela com o zoom gigante
-  const spacing = 4.0; 
+  // Espaçamento ideal para os 3 aparecerem na tela sem encavalar
+  const spacing = 2.2; 
 
   for (let i = 0; i < totalModels; i++) {
     const { wrapper } = await buildMannequin(state.camisetas[i]);
     wrapper.position.x = (i - 1) * spacing; 
-    wrapper.position.y = -0.3; 
-    scene.add(wrapper);
+    carouselGroup.add(wrapper);
     wrappers.push(wrapper);
   }
 
@@ -344,8 +347,9 @@ async function initHeroViewer() {
   let statePhase = 'turning_back'; 
   let phaseTimer = 0;
   
-  let currentCameraX = 0;
-  let targetCameraX = 0;
+  // A câmera NÃO se move no eixo X. O grupo inteiro (carrosselGroup) que desliza.
+  let currentGroupX = 0;
+  let targetGroupX = 0;
   let extraSpinAngle = 0; 
 
   const clock = new THREE.Clock();
@@ -370,21 +374,23 @@ async function initHeroViewer() {
       if (phaseTimer > 1.0) { 
         statePhase = 'sliding';
         const nextIndex = (currentIndex + 1) % totalModels;
+        
         if (nextIndex === 0) {
+           // Se voltou pro primeiro, reseta tudo e desliza do final pro começo
            wrappers.forEach((w, i) => { w.position.x = (i - 1) * spacing; });
-           currentCameraX = (totalModels - 1) * spacing;
-           targetCameraX = 0;
+           currentGroupX = -(totalModels - 1) * spacing;
+           targetGroupX = 0;
         } else {
-           targetCameraX = (nextIndex - 1) * spacing;
+           targetGroupX = -nextIndex * spacing;
         }
       }
     }
     else if (statePhase === 'sliding') {
       const smoothFactor = 1 - Math.exp(-3.0 * delta); 
-      currentCameraX += (targetCameraX - currentCameraX) * smoothFactor;
+      currentGroupX += (targetGroupX - currentGroupX) * smoothFactor;
       
-      if (Math.abs(targetCameraX - currentCameraX) < 0.01) {
-        currentCameraX = targetCameraX;
+      if (Math.abs(targetGroupX - currentGroupX) < 0.01) {
+        currentGroupX = targetGroupX;
         currentIndex = (currentIndex + 1) % totalModels;
         statePhase = 'turning_back';
         phaseTimer = 0;
@@ -392,10 +398,12 @@ async function initHeroViewer() {
       }
     }
 
-    // Posição final da câmera
-    camera.position.x = currentCameraX;
-    camera.position.y = 2.0; // Altura da câmera
-    camera.lookAt(currentCameraX, 1.8, 0); // Foco no peito, jogando o boneco pra cima da tela
+    // Desliza o GRUPO (não a câmera), mantendo os 3 manequins visíveis
+    carouselGroup.position.x = currentGroupX;
+    
+    // Câmera fixa e alta, focando no peito/camisa
+    camera.position.y = 2.4; 
+    camera.lookAt(currentGroupX, 2.0, 0); 
     
     wrappers.forEach((w, i) => {
       if (i === currentIndex) {
