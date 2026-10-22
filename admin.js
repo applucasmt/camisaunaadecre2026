@@ -93,9 +93,8 @@ function editCamisetaTexturas(id) {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
       <div class="admin-form">
         
-        <!-- CONTROLE DE MODO -->
         <div style="display:flex; gap:10px; margin-bottom:20px; padding:15px; background:rgba(255,255,255,0.05); border-radius:8px; border:1px solid var(--border);">
-          <button class="btn-ghost mode-btn" id="modeRotate" style="flex:1;">🔄 Rotacionar Modelo</button>
+          <button class="btn-ghost mode-btn" id="modeRotate" style="flex:1;">🔄 Girar Modelo</button>
           <button class="btn-ghost mode-btn active" id="modeEdit" style="flex:1; border-color:var(--secondary); color:var(--secondary);">✏️ Ajustar Estampa</button>
         </div>
 
@@ -116,10 +115,13 @@ function editCamisetaTexturas(id) {
           `).join('')}
         </div>
 
-        <div id="edit-instructions" style="margin-top:20px; padding:15px; border:1px dashed var(--secondary); border-radius:8px; text-align:center;">
-          <p style="font-size:0.85rem; color:var(--text-dim);">Modo Ajuste Ativo</p>
+        <div id="edit-instructions" style="margin-top:20px; padding:15px; border:1px dashed var(--secondary); border-radius:8px; text-align:center; background:rgba(212,175,55,0.05);">
+          <p style="font-size:0.85rem; color:var(--text-dim); margin-bottom:8px;">Modo Ajuste Ativo</p>
           <strong style="color:var(--secondary); font-size:1.1rem;" id="editLabel">Ajustando: Frente</strong><br>
-          <span style="font-size:0.8rem;">Arraste com o <b>Botão Esquerdo</b> para mover.<br>Role o <b>Scroll</b> para aumentar/diminuir.<br><br><i>*Para rotacionar, clique em "Rotacionar Modelo" ou use o <b>Botão Direito</b> do mouse.</i></span>
+          <span style="font-size:0.8rem; display:block; margin-top:8px; line-height:1.4;">
+            <b>Arraste</b> com o botão esquerdo do mouse para mover.<br>
+            Role o <b>Scroll</b> para aumentar/diminuir.
+          </span>
         </div>
 
         <button class="btn-primary" id="saveTexSettings" style="margin-top:20px;">Salvar Todos os Ajustes</button>
@@ -133,7 +135,6 @@ function editCamisetaTexturas(id) {
   let currentPart = 'frente';
   let isEditMode = true;
 
-  // Lógica de troca de modo (Rotação x Ajuste)
   const btnRotate = document.getElementById('modeRotate');
   const btnEdit = document.getElementById('modeEdit');
   const instructions = document.getElementById('edit-instructions');
@@ -143,12 +144,13 @@ function editCamisetaTexturas(id) {
     btnRotate.classList.toggle('active', !edit);
     btnEdit.classList.toggle('active', edit);
     instructions.style.opacity = edit ? '1' : '0.3';
+    instructions.style.display = edit ? 'block' : 'none';
     
     if (ADMIN.previewViewer) {
       if (!edit) {
-        ADMIN.previewViewer.setEditingMode(null); // Desativa edição (libera rotação)
+        ADMIN.previewViewer.setEditingMode(null); // Libera rotação
       } else {
-        ADMIN.previewViewer.setEditingMode(currentPart); // Ativa edição
+        ADMIN.previewViewer.setEditingMode(currentPart); // Trava rotação, libera arrastar
       }
     }
   };
@@ -156,7 +158,6 @@ function editCamisetaTexturas(id) {
   btnRotate.onclick = () => setMode(false);
   btnEdit.onclick = () => setMode(true);
 
-  // Controle de Abas de partes da camisa
   const partBtns = document.querySelectorAll('.part-btn');
   partBtns.forEach(btn => {
     btn.onclick = () => {
@@ -188,7 +189,7 @@ function editCamisetaTexturas(id) {
       scale_gola: cfg.gola.scale
     };
     const r = await window.__apiPost({ action:'updateCamiseta', senha:getSenha(), id: c.id, dados });
-    if(r.ok) { Object.assign(c, dados); window.__toast('Ajustes de textura salvos!'); }
+    if(r.ok) { Object.assign(c, dados); window.__toast('Ajustes salvos com sucesso!'); }
   };
 
   initAdminPreview(c).then(() => {
@@ -199,7 +200,7 @@ function editCamisetaTexturas(id) {
       window.__loadTexture(c.textura_gola, c.cor_base)
     ]).then(([f, cB, m, g]) => {
       ADMIN.previewViewer.setTextures(f, cB, m, g, ADMIN.previewViewer.configs);
-      setMode(true); // Inicia no modo edição por padrão
+      setMode(true); // Inicia no modo edição
     });
   });
 }
