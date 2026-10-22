@@ -5,7 +5,7 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbyMiP-nbR9_UYZGCA7dtAWIm4HIl2Vg4UeatogPC9f7ORdEZMSEJwU6LggDenh0eqDVug/exec';
 
-const state = { config: {}, camisetas: [], heroViewer: null, productViewers: {}, modalViewer: null };
+const state = { config: {}, camisetas: [], productViewers: {} };
 const $ = (s, r = document) => r.querySelector(s);
 window.__state = state;
 window.THREE = THREE;
@@ -178,7 +178,8 @@ async function createViewer(el, cam, options = {}) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 1000);
   
-  camera.position.set(0, 1.65, 2.5);
+  // Enquadramento focado na camisa
+  camera.position.set(0, 1.8, 2.8);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
@@ -199,9 +200,7 @@ async function createViewer(el, cam, options = {}) {
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     
-    controls.target.set(0, 1.55, 0); 
-    controls.minDistance = 0.1;
-    controls.maxDistance = Infinity;
+    controls.target.set(0, 1.6, 0); 
     controls.enablePan = false;
     controls.autoRotate = options.autoRotate !== false;
     controls.autoRotateSpeed = 1.5;
@@ -287,7 +286,7 @@ async function createViewer(el, cam, options = {}) {
       setAutoRotate(v) { controls.autoRotate = v; if (!v) pauseUntil = Infinity; else pauseUntil = 0; },
       zoomIn() { controls.dollyIn(1.2); controls.update(); },
       zoomOut() { controls.dollyOut(1.2); controls.update(); },
-      resetCamera() { camera.position.set(0, 1.65, 2.5); controls.target.set(0, 1.55, 0); controls.update(); },
+      resetCamera() { camera.position.set(0, 1.8, 2.8); controls.target.set(0, 1.6, 0); controls.update(); },
       destroy() { cancelAnimationFrame(animId); ro.disconnect(); controls.dispose(); renderer.dispose(); el.innerHTML = ''; }
     };
 
@@ -299,115 +298,22 @@ async function createViewer(el, cam, options = {}) {
 }
 window.__createViewer = createViewer;
 
-// ============ HERO VIEWER (CÂMERA 100% FIXA E FOCO NO TOPO) ============
-async function initHeroViewer() {
-  const el = document.getElementById('heroViewer');
-  if (!el || state.camisetas.length === 0) return;
-  
-  const w = el.clientWidth || 800;
-  const h = el.clientHeight || 600;
-
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
-  
-  // Câmera super fixa e alta. Foca na altura 2.2 (topo do peito).
-  camera.position.set(0, 2.2, 3.5); 
-
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setSize(w, h);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.domElement.style.pointerEvents = 'none'; 
-  
-  el.appendChild(renderer.domElement);
-
-  scene.add(new THREE.AmbientLight(0xffffff, 1.5));
-  const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(2, 5, 4); scene.add(key);
-  const fill = new THREE.DirectionalLight(0xffffff, 1.0); fill.position.set(-4, 3, 2); scene.add(fill);
-  const rim = new THREE.DirectionalLight(0xd4af37, 1.5); rim.position.set(0, 2, -5); scene.add(rim);
-
-  const wrappers = [];
-  const totalModels = Math.min(3, state.camisetas.length);
-  const spacing = 1.8; // Distância lateral entre eles
-
-  for (let i = 0; i < totalModels; i++) {
-    const { wrapper } = await buildMannequin(state.camisetas[i]);
-    // Posiciona 1 na esquerda (-1.8), 1 no centro (0) e 1 na direita (1.8)
-    wrapper.position.x = (i - 1) * spacing; 
-    wrapper.position.y = -0.3; 
-    scene.add(wrapper);
-    wrappers.push(wrapper);
-  }
-
-  let currentIndex = 0;
-  let statePhase = 'turning_back'; 
-  let phaseTimer = 0;
-  let extraSpinAngle = 0; 
-
-  const clock = new THREE.Clock();
-
-  function animate() {
-    requestAnimationFrame(animate);
-    const delta = clock.getDelta();
-    phaseTimer += delta;
-
-    // As fases controlam APENAS o giro dos modelos
-    if (statePhase === 'turning_back') {
-      extraSpinAngle = Math.min(Math.PI, extraSpinAngle + delta * 2.5); 
-      if (extraSpinAngle >= Math.PI) { statePhase = 'pausing_back'; phaseTimer = 0; }
-    } 
-    else if (statePhase === 'pausing_back') {
-      if (phaseTimer > 2.0) { statePhase = 'turning_front'; }
-    }
-    else if (statePhase === 'turning_front') {
-      extraSpinAngle = Math.max(0, extraSpinAngle - delta * 2.5);
-      if (extraSpinAngle <= 0) { statePhase = 'pausing_front'; phaseTimer = 0; }
-    }
-    else if (statePhase === 'pausing_front') {
-      if (phaseTimer > 1.0) { 
-        // Ao terminar a pausa, passa o turno de giro para o próximo modelo
-        currentIndex = (currentIndex + 1) % totalModels;
-        statePhase = 'turning_back';
-        phaseTimer = 0;
-        extraSpinAngle = 0;
-      }
-    }
-
-    // Câmera permanece FIXA olhando para a altura 2.0 (peito/camisa)
-    camera.lookAt(0, 2.0, 0); 
-    
-    // Gira APENAS o modelo que está na vez. Os outros ficam virados de frente (0).
-    wrappers.forEach((w, i) => {
-      if (i === currentIndex) {
-        w.rotation.y = extraSpinAngle;
-      } else {
-        w.rotation.y = 0;
-      }
-    });
-
-    renderer.render(scene, camera);
-  }
-  animate();
-
-  const ro = new ResizeObserver(() => {
-    const w2 = el.clientWidth, h2 = el.clientHeight;
-    if (!w2 || !h2) return;
-    camera.aspect = w2 / h2; camera.updateProjectionMatrix(); renderer.setSize(w2, h2);
-  });
-  ro.observe(el);
-}
-
+// ============ SISTEMA DE CARDS LADO A LADO ============
 async function loadSite() {
   try {
     const data = await apiGet('getAll');
     if (!data.ok) throw new Error(data.error);
     state.config = Object.fromEntries(data.config.map(c => [c.CHAVE, c.VALOR]));
     state.camisetas = data.camisetas;
+    
+    // Atualiza textos da página
     if (state.config.titulo_site) $('#heroTitle').textContent = state.config.titulo_site;
     if (state.config.subtitulo_site) $('#heroSub').textContent = state.config.subtitulo_site;
     if (state.config.cta_texto) $('#heroCta').textContent = state.config.cta_texto;
+    
     renderProducts();
   } catch (e) {
+    // Fallback para caso a API falhe
     state.camisetas = [
       { id: 1, nome: 'Classic Black', descricao: 'Algodão premium', cor_base: '#111111', destaque: 'Silhueta atemporal' },
       { id: 2, nome: 'Urban White', descricao: 'Modelagem oversized', cor_base: '#f5f5f5', destaque: 'Minimalismo urbano' },
@@ -421,34 +327,111 @@ async function renderProducts() {
   const grid = $('#productsGrid');
   grid.innerHTML = '';
   
-  await initHeroViewer();
+  // Configura o CSS do container para permitir a animação de slider
+  grid.style.display = 'flex';
+  grid.style.justifyContent = 'center';
+  grid.style.alignItems = 'center';
+  grid.style.height = '500px'; // Altura do palco
+  grid.style.gap = '0px'; // Removemos o gap, faremos o posicionamento absoluto via JS
+  grid.style.position = 'relative';
+  grid.style.overflow = 'hidden';
 
-  state.camisetas.forEach((cam, idx) => {
+  const cardsData = [];
+  const totalModels = Math.min(3, state.camisetas.length);
+
+  for (let i = 0; i < totalModels; i++) {
+    const cam = state.camisetas[i];
     const card = document.createElement('div');
     card.className = 'product-card';
+    
+    // Estilos base do card para o layout de Slider
+    card.style.position = 'absolute';
+    card.style.width = '320px';
+    card.style.height = '420px';
+    card.style.transition = 'all 0.8s cubic-bezier(0.25, 1, 0.5, 1)';
+    card.style.boxShadow = '0 10px 30px rgba(0,0,0,0.5)';
+    card.style.borderRadius = '16px';
+    card.style.overflow = 'hidden';
+    card.style.display = 'flex';
+    card.style.flexDirection = 'column';
+    card.style.background = '#1a1a1a';
+    card.style.border = '1px solid #333';
+    
     card.innerHTML = `
-      <div class="product-viewer" id="viewer-${cam.id}"><div class="product-viewer-hint">Arraste · Zoom · Gire</div></div>
-      <div class="product-info">
-        ${cam.destaque ? `<span class="product-tag">${cam.destaque}</span>` : ''}
-        <h3>${cam.nome}</h3><p>${cam.descricao || ''}</p>
-        <button class="btn-primary" data-explore="${cam.id}">Explorar em 3D</button>
-      </div>`;
+      <div class="product-viewer" id="viewer-${cam.id}" style="flex: 1; position: relative;"></div>
+      <div class="product-info" style="padding: 20px; text-align: center; background: rgba(0,0,0,0.8); position: relative; z-index: 2;">
+        ${cam.destaque ? `<span class="product-tag" style="color:var(--secondary); font-size:0.8rem; text-transform:uppercase; letter-spacing:1px;">${cam.destaque}</span>` : ''}
+        <h3 style="margin: 5px 0; color: white;">${cam.nome}</h3>
+        <button class="btn-primary" data-explore="${cam.id}" style="margin-top: 10px; padding: 10px 20px; font-size: 0.9rem;">Explorar em 3D</button>
+      </div>
+    `;
     grid.appendChild(card);
+    cardsData.push({ el: card, id: cam.id });
+
+    // Inicializa o Three.js DENTRO do card
     setTimeout(async () => {
       const viewerEl = document.getElementById(`viewer-${cam.id}`);
       if (viewerEl) { state.productViewers[cam.id] = await createViewer(viewerEl, cam, { autoRotate: true }); }
-    }, 200 * idx);
+    }, 200 * i);
+
+    // Ação do Botão
     card.querySelector('[data-explore]').onclick = async () => {
       const viewerModal = document.getElementById('viewerModal');
       document.getElementById('viewerTitle').textContent = cam.nome;
       document.getElementById('viewerDesc').textContent = cam.descricao || '';
       viewerModal.classList.add('active');
+      
+      const modalContainer = document.getElementById('fullViewer');
       if (state.modalViewer) { state.modalViewer.destroy(); state.modalViewer = null; }
-      const el = document.getElementById('fullViewer');
       await new Promise(r => setTimeout(r, 60));
-      state.modalViewer = await createViewer(el, cam, { autoRotate: true });
+      state.modalViewer = await createViewer(modalContainer, cam, { autoRotate: true });
     };
-  });
+  }
+
+  // Lógica de posicionamento do Slider
+  let activeIndex = 0; // O card do centro
+
+  function updatePositions() {
+    cardsData.forEach((item, index) => {
+      // Calcula a posição relativa ao card ativo central
+      let offset = index - activeIndex;
+      
+      // Ajuste para o slider circular (se passar de 1, vai para a esquerda)
+      if (offset === 2) offset = -1;
+      if (offset === -2) offset = 1;
+
+      const el = item.el;
+
+      if (offset === 0) {
+        // CARD CENTRAL (Foco)
+        el.style.transform = 'translateX(0) scale(1.1)';
+        el.style.zIndex = '10';
+        el.style.opacity = '1';
+        el.style.filter = 'brightness(1)';
+      } else if (offset === 1) {
+        // CARD DA DIREITA (Fundo)
+        el.style.transform = 'translateX(280px) scale(0.85)';
+        el.style.zIndex = '5';
+        el.style.opacity = '0.6';
+        el.style.filter = 'brightness(0.4)';
+      } else if (offset === -1) {
+        // CARD DA ESQUERDA (Fundo)
+        el.style.transform = 'translateX(-280px) scale(0.85)';
+        el.style.zIndex = '5';
+        el.style.opacity = '0.6';
+        el.style.filter = 'brightness(0.4)';
+      }
+    });
+  }
+
+  // Inicia as posições
+  updatePositions();
+
+  // Roda o carrossel a cada 5 segundos
+  setInterval(() => {
+    activeIndex = (activeIndex + 1) % totalModels;
+    updatePositions();
+  }, 5000);
 }
 
 function initUI() {
