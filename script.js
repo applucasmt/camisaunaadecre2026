@@ -3,9 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 
-// ==========================================
 // CARREGA O GSAP (SCROLLTELLING)
-// ==========================================
 const gsapScript = document.createElement('script');
 gsapScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js';
 gsapScript.onload = () => {
@@ -175,7 +173,7 @@ async function buildMannequin(cam) {
   return { wrapper, model, textures, configs, mannequinColors };
 }
 
-// ============ VIEWER ISOLADO (ADMIN / MODAL) ============
+// ============ VIEWER ISOLADO (ADMIN) ============
 async function createViewer(el, cam, options = {}) {
   const w = el.clientWidth || 400;
   const h = el.clientHeight || 400;
@@ -244,11 +242,12 @@ async function createViewer(el, cam, options = {}) {
 window.__createViewer = createViewer;
 
 // ==========================================
-// CORE: SCROLLTELLING APPLE
+// CORE: SCROLLTELLING APPLE (CÂMERA FIXA E GIRO NO ALVO)
 // ==========================================
 async function initApp() {
   gsap.registerPlugin(ScrollTrigger);
   
+  // 1. Carrega API
   const data = await apiGet('getAll');
   if (data.ok) {
     state.config = Object.fromEntries(data.config.map(c => [c.CHAVE, c.VALOR]));
@@ -264,13 +263,14 @@ async function initApp() {
     ];
   }
 
-  // CONFIGURA O THREE.JS GLOBAL (FUNDO)
+  // 2. Configura Three.js Base
   const container = document.getElementById('webgl-container');
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
   
-  // Câmera inicial afastada e alta
-  camera.position.set(0, 2.5, 8); 
+  // Câmera começa no centro, bem longe e alta
+  camera.position.set(0, 2.5, 7.0); 
+  camera.lookAt(0, 1.5, 0);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -278,39 +278,37 @@ async function initApp() {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   container.appendChild(renderer.domElement);
 
+  // Luzes
   scene.add(new THREE.AmbientLight(0xffffff, 1.5));
   const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(2, 5, 4); scene.add(key);
   const fill = new THREE.DirectionalLight(0xffffff, 1.0); fill.position.set(-4, 3, 2); scene.add(fill);
   const rim = new THREE.DirectionalLight(0xd4af37, 1.5); rim.position.set(0, 2, -5); scene.add(rim);
 
-  // CARREGA OS 3 MANEQUINS E DISTRIBUI NO ESPAÇO (NÃO LADO A LADO, MAS EM PROFUNDIDADE)
+  // 3. CARREGA OS 3 MANEQUINS NAS EXTREMIDADES
   const group = new THREE.Group();
   scene.add(group);
   
   const totalModels = Math.min(3, state.camisetas.length);
-  const spacing = 4.0; 
+  // POSICIONAMENTO LATERAL: Esquerda (-4), Centro (0), Direita (4)
+  const spacing = 4.5; 
 
   for (let i = 0; i < totalModels; i++) {
     const { wrapper } = await buildMannequin(state.camisetas[i]);
     
-    // O modelo 1 fica no centro (X = 0).
-    // O modelo 2 fica na direita (X = 4).
-    // O modelo 3 fica na esquerda (X = -4).
-    if (i === 0) wrapper.position.set(0, -0.3, 0);
-    if (i === 1) wrapper.position.set(spacing, -0.3, 0);
-    if (i === 2) wrapper.position.set(-spacing, -0.3, 0);
+    if (i === 0) wrapper.position.set(0, -0.3, 0); // Centro
+    if (i === 1) wrapper.position.set(spacing, -0.3, 0); // Direita
+    if (i === 2) wrapper.position.set(-spacing, -0.3, 0); // Esquerda
     
     group.add(wrapper);
   }
 
-  // Loop de animação
+  // 4. Rotação Contínua dos manequins no próprio eixo
   function animate() {
     requestAnimationFrame(animate);
     const t = performance.now() * 0.001;
     
-    // Girar todos no próprio eixo continuamente
     group.children.forEach(child => {
-      child.rotation.y = t * 0.5;
+      child.rotation.y = t * 0.5; // Gira em torno do eixo Y
     });
 
     renderer.render(scene, camera);
@@ -318,10 +316,8 @@ async function initApp() {
   animate();
 
   // ==========================================
-  // SCROLLTELLING (GSAP TRIGGER)
+  // 5. SCROLLTELLING (CÂMERA FIXA, APENAS OLHAR PARA OS LADOS)
   // ==========================================
-  
-  // Fade in dos textos
   gsap.utils.toArray('.content-box').forEach(box => {
     ScrollTrigger.create({
       trigger: box,
@@ -331,33 +327,27 @@ async function initApp() {
     });
   });
 
-  // Timeline do movimento da câmera (Cinematográfico)
+  // Variáveis para suavizar o olhar (LookAt)
+  const lookAtTarget = { x: 0, y: 1.6, z: 0 };
+
   const tl = gsap.timeline({
     scrollTrigger: {
       trigger: ".scroll-container",
       start: "top top",
       end: "bottom bottom",
-      scrub: 1, // Deixa o movimento suave e amarrado ao mouse
+      scrub: 1,
     }
   });
 
-  // Seção 1 -> Seção 2 (Voa em direção ao Manequim 1)
-  tl.to(camera.position, {
-    x: 0, y: 1.8, z: 3.5,
-    scrollTrigger: { trigger: "#s2", start: "top bottom", end: "top top", scrub: 1 }
-  });
+  // Seção 1 (Intro) -> Seção 2 (Foco no Centro)
+  tl.to(camera.position, { z: 3.5, y: 2.0, scrollTrigger: { trigger: "#s2", start: "top bottom", end: "top top", scrub: 1 } })
+    .to(lookAtTarget, { x: 0, y: 1.8, z: 0, onUpdate: () => camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z), scrollTrigger: { trigger: "#s2", start: "top bottom", end: "top top", scrub: 1 } }, "<");
 
-  // Seção 2 -> Seção 3 (Desliza para a direita no Manequim 2)
-  tl.to(camera.position, {
-    x: spacing, y: 1.8, z: 3.5,
-    scrollTrigger: { trigger: "#s3", start: "top bottom", end: "top top", scrub: 1 }
-  });
+  // Seção 2 -> Seção 3 (Olha para a Direita)
+  tl.to(lookAtTarget, { x: spacing, y: 1.8, z: 0, onUpdate: () => camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z), scrollTrigger: { trigger: "#s3", start: "top bottom", end: "top top", scrub: 1 } });
 
-  // Seção 3 -> Seção 4 (Voa para a esquerda no Manequim 3)
-  tl.to(camera.position, {
-    x: -spacing, y: 1.8, z: 3.5,
-    scrollTrigger: { trigger: "#s4", start: "top bottom", end: "top top", scrub: 1 }
-  });
+  // Seção 3 -> Seção 4 (Olha para a Esquerda)
+  tl.to(lookAtTarget, { x: -spacing, y: 1.8, z: 0, onUpdate: () => camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z), scrollTrigger: { trigger: "#s4", start: "top bottom", end: "top top", scrub: 1 } });
 
   // Resize
   window.addEventListener('resize', () => {
