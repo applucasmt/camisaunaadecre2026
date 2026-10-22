@@ -142,10 +142,15 @@ async function buildMannequin(cam) {
   const targetHeight = 2.0;
   const scaleFactor = size.y > 0.0001 ? targetHeight / size.y : 1;
 
+  // O WRAPPER NÃO GIRA MAIS. ELE APENAS POSICIONA NO CHÃO.
   const wrapper = new THREE.Group();
-  wrapper.add(model);
-  wrapper.scale.setScalar(scaleFactor);
-  wrapper.position.set(-center.x * scaleFactor, -box.min.y * scaleFactor, -center.z * scaleFactor);
+  const spinner = new THREE.Group(); // Quem vai girar é o spinner
+  spinner.add(model);
+  
+  spinner.scale.setScalar(scaleFactor);
+  spinner.position.set(-center.x * scaleFactor, -box.min.y * scaleFactor, -center.z * scaleFactor);
+
+  wrapper.add(spinner);
 
   const textures = {
     frente: await loadTexture(cam.textura_principal, cam.cor_base),
@@ -170,7 +175,7 @@ async function buildMannequin(cam) {
   applyTshirtTexture(model, textures, configs);
   applyMannequinColors(model, mannequinColors);
   
-  return { wrapper, model, textures, configs, mannequinColors };
+  return { wrapper, spinner, model, textures, configs, mannequinColors };
 }
 
 // ============ VIEWER ISOLADO (ADMIN) ============
@@ -194,7 +199,7 @@ async function createViewer(el, cam, options = {}) {
   const rim = new THREE.DirectionalLight(0xd4af37, 1.5); rim.position.set(0, 2, -5); scene.add(rim);
 
   try {
-    const { wrapper, model, textures, configs, mannequinColors } = await buildMannequin(cam);
+    const { wrapper, spinner, model, textures, configs, mannequinColors } = await buildMannequin(cam);
     scene.add(wrapper);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -242,7 +247,7 @@ async function createViewer(el, cam, options = {}) {
 window.__createViewer = createViewer;
 
 // ==========================================
-// CORE: SCROLLTELLING APPLE (ZOOM EXTREMO NA CAMISA)
+// CORE: SCROLLTELLING APPLE (FIXO NO CENTRO, OLHANDO O PEITO)
 // ==========================================
 async function initApp() {
   gsap.registerPlugin(ScrollTrigger);
@@ -266,8 +271,8 @@ async function initApp() {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
   
-  // CÂMERA ULTRA CLOSE-UP: Z=1.0 (super perto), Y=1.8 (altura do peito)
-  camera.position.set(0, 1.8, 1.0); 
+  // CÂMERA NO PEITO: Y=1.45, Z=2.0
+  camera.position.set(0, 1.45, 2.0); 
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -284,25 +289,28 @@ async function initApp() {
   scene.add(group);
   
   const totalModels = Math.min(3, state.camisetas.length);
-  // ESPAÇAMENTO GIGANTE: Para eles não colidirem nesse zoom extremo
-  const spacing = 6.5; 
+  const spacing = 5.0; 
+  const spinners = [];
 
   for (let i = 0; i < totalModels; i++) {
-    const { wrapper } = await buildMannequin(state.camisetas[i]);
+    const { wrapper, spinner } = await buildMannequin(state.camisetas[i]);
     
-    if (i === 0) wrapper.position.set(0, -0.3, 0); // Centro
-    if (i === 1) wrapper.position.set(spacing, -0.3, 0); // Direita
-    if (i === 2) wrapper.position.set(-spacing, -0.3, 0); // Esquerda
+    // Define a posição lateral de cada um
+    if (i === 0) wrapper.position.set(0, -0.3, 0); 
+    if (i === 1) wrapper.position.set(spacing, -0.3, 0); 
+    if (i === 2) wrapper.position.set(-spacing, -0.3, 0); 
     
     group.add(wrapper);
+    spinners.push(spinner);
   }
 
+  // Rotação Contínua APENAS do grupo interno (Spinner)
   function animate() {
     requestAnimationFrame(animate);
     const t = performance.now() * 0.001;
     
-    group.children.forEach(child => {
-      child.rotation.y = t * 0.5;
+    spinners.forEach(spinner => {
+      spinner.rotation.y = t * 0.5;
     });
 
     renderer.render(scene, camera);
@@ -310,7 +318,7 @@ async function initApp() {
   animate();
 
   // ==========================================
-  // SCROLLTELLING
+  // SCROLLTELLING (VIRA A CABEÇA PARA OS LADOS)
   // ==========================================
   gsap.utils.toArray('.content-box').forEach(box => {
     ScrollTrigger.create({
@@ -321,8 +329,8 @@ async function initApp() {
     });
   });
 
-  // O ponto para onde a câmera olha (focado na camisa)
-  const lookAtTarget = { x: 0, y: 1.5, z: 0 };
+  // Aponta para a camisa (Y=1.45)
+  const lookAtTarget = { x: 0, y: 1.45, z: 0 };
 
   const tl = gsap.timeline({
     scrollTrigger: {
@@ -334,13 +342,13 @@ async function initApp() {
   });
 
   // Seção 1 -> Seção 2 (Foco no Centro)
-  tl.to(lookAtTarget, { x: 0, y: 1.5, z: 0, onUpdate: () => camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z), scrollTrigger: { trigger: "#s2", start: "top bottom", end: "top top", scrub: 1 } });
+  tl.to(lookAtTarget, { x: 0, y: 1.45, z: 0, onUpdate: () => camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z), scrollTrigger: { trigger: "#s2", start: "top bottom", end: "top top", scrub: 1 } });
 
   // Seção 2 -> Seção 3 (Vira para a Direita)
-  tl.to(lookAtTarget, { x: spacing, y: 1.5, z: 0, onUpdate: () => camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z), scrollTrigger: { trigger: "#s3", start: "top bottom", end: "top top", scrub: 1 } });
+  tl.to(lookAtTarget, { x: spacing, y: 1.45, z: 0, onUpdate: () => camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z), scrollTrigger: { trigger: "#s3", start: "top bottom", end: "top top", scrub: 1 } });
 
   // Seção 3 -> Seção 4 (Vira para a Esquerda)
-  tl.to(lookAtTarget, { x: -spacing, y: 1.5, z: 0, onUpdate: () => camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z), scrollTrigger: { trigger: "#s4", start: "top bottom", end: "top top", scrub: 1 } });
+  tl.to(lookAtTarget, { x: -spacing, y: 1.45, z: 0, onUpdate: () => camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z), scrollTrigger: { trigger: "#s4", start: "top bottom", end: "top top", scrub: 1 } });
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
