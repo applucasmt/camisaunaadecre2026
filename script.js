@@ -297,7 +297,7 @@ async function createViewer(el, cam, options = {}) {
 }
 window.__createViewer = createViewer;
 
-// ============ HERO VIEWER (COREOGRAFIA PERFEITA) ============
+// ============ HERO VIEWER (COREOGRAFIA NATURAL CIRCULAR) ============
 async function initHeroViewer() {
   const el = document.getElementById('heroViewer');
   if (!el || state.camisetas.length === 0) return;
@@ -333,10 +333,13 @@ async function initHeroViewer() {
   for (let i = 0; i < totalModels; i++) {
     const { wrapper } = await buildMannequin(state.camisetas[i]);
     const angle = (i / totalModels) * Math.PI * 2;
+    
+    // Posiciona no círculo
     wrapper.position.set(Math.sin(angle) * radius, 0, Math.cos(angle) * radius);
     
-    // Ao invés de usar lookAt (que causa o deitar), apenas define a rotação inicial compensando o ângulo
-    wrapper.rotation.y = -angle; 
+    // CORREÇÃO: Removemos a compensação de rotação. 
+    // Assim eles mantêm sua orientação natural. O que está na frente olha para você.
+    // O que está atrás de você, olha para as suas costas. E o da lateral, fica de lado.
 
     carouselGroup.add(wrapper);
     wrappers.push(wrapper);
@@ -357,6 +360,7 @@ async function initHeroViewer() {
     const delta = clock.getDelta();
     phaseTimer += delta;
 
+    // CONTROLE DE TEMPO E ANIMAÇÕES (FASES)
     if (statePhase === 'turning_back') {
       extraSpinAngle = Math.min(Math.PI, extraSpinAngle + delta * 2.5); 
       if (extraSpinAngle >= Math.PI) { statePhase = 'pausing_back'; phaseTimer = 0; }
@@ -387,21 +391,17 @@ async function initHeroViewer() {
       }
     }
 
-    // APLICA ROTAÇÃO NO CARROSSEL
+    // APLICA A ROTAÇÃO NO CARROSSEL
     carouselGroup.rotation.y = currentCarouselAngle;
     
-    // APLICA ROTAÇÃO NOS MANEQUINS
+    // APLICA O GIRO INDIVIDUAL
     wrappers.forEach((w, i) => {
-      const angleOffset = (i / totalModels) * Math.PI * 2;
-      // Compensação do carrossel para o manequim ficar de frente para o espectador
-      const camCompensation = -currentCarouselAngle - angleOffset;
-      
       if (i === currentIndex) {
-        // O manequim ativo soma o giro individual
-        w.rotation.y = camCompensation + extraSpinAngle;
+        // O manequim da frente tem a rotação base 0 + o giro individual
+        w.rotation.y = extraSpinAngle;
       } else {
-        // Os outros ficam travados de frente
-        w.rotation.y = camCompensation;
+        // Os outros ficam com rotação base 0 (mantendo sua posição natural no círculo)
+        w.rotation.y = 0;
       }
     });
 
