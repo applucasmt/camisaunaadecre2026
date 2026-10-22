@@ -312,9 +312,9 @@ async function initHeroViewer() {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
   
-  // CÂMERA AJUSTADA: Bem mais alta (Y = 2.2) e um pouco mais longe (Z = 3.8)
-  // Isso faz o boneco subir no canvas, focando da cintura para cima.
-  camera.position.set(0, 2.2, 3.8); 
+  // CÂMERA MAIS PRÓXIMA (Z = 2.2) E MAIS ALTA (Y = 1.9)
+  // O Z 2.2 deixa o boneco bem grande, preenchendo o container.
+  camera.position.set(0, 1.9, 2.2); 
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
@@ -395,8 +395,8 @@ async function initHeroViewer() {
 
     // Posição da câmera
     camera.position.x = currentCameraX;
-    camera.position.y = 2.2; // Mantém a câmera alta
-    camera.lookAt(currentCameraX, 1.9, 0); // Olha para o peito/camisa, deixando o boneco no topo do canvas
+    camera.position.y = 1.9; // Altura da câmera
+    camera.lookAt(currentCameraX, 1.6, 0); // Olha para o peito/camisa
     
     wrappers.forEach((w, i) => {
       if (i === currentIndex) {
