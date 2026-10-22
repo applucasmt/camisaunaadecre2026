@@ -3,8 +3,21 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 
+// ==========================================
+// CARREGA O GSAP (SCROLLTELLING)
+// ==========================================
+const gsapScript = document.createElement('script');
+gsapScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js';
+gsapScript.onload = () => {
+  const stScript = document.createElement('script');
+  stScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js';
+  stScript.onload = () => initApp();
+  document.head.appendChild(stScript);
+};
+document.head.appendChild(gsapScript);
+
 const API_URL = 'https://script.google.com/macros/s/AKfycbyMiP-nbR9_UYZGCA7dtAWIm4HIl2Vg4UeatogPC9f7ORdEZMSEJwU6LggDenh0eqDVug/exec';
-const state = { config: {}, camisetas: [], viewers: [] };
+const state = { config: {}, camisetas: [], modalViewer: null };
 window.__state = state;
 window.THREE = THREE;
 
@@ -12,7 +25,7 @@ window.THREE = THREE;
 function toast(msg, isError = false) {
   let el = document.getElementById('toast') || document.createElement('div');
   el.id = 'toast'; el.className = 'toast'; el.textContent = msg;
-  el.style.background = isError ? '#ff4d4d' : 'var(--secondary)';
+  el.style.background = isError ? '#ff4d4d' : 'var(--accent)';
   document.body.appendChild(el);
   setTimeout(() => el.classList.add('show'), 10);
   setTimeout(() => el.classList.remove('show'), 3000);
@@ -67,6 +80,7 @@ function loadAvatarModel() {
   return gltfPromise;
 }
 
+// ============ MANIPULAÇÃO DE TEXTURAS ============
 function applyTshirtTexture(root, textures, configs) {
   root.traverse(child => {
     if (!child.isMesh) return;
@@ -161,16 +175,14 @@ async function buildMannequin(cam) {
   return { wrapper, model, textures, configs, mannequinColors };
 }
 
-// ============ CRIAR VISUALIZADOR 3D ISOLADO ============
+// ============ VIEWER ISOLADO (ADMIN / MODAL) ============
 async function createViewer(el, cam, options = {}) {
   const w = el.clientWidth || 400;
   const h = el.clientHeight || 400;
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 1000);
-  
-  // CÂMERA ISOLADA: Enquadramento perfeito (da cintura pra cima)
-  camera.position.set(0, 1.8, 3.2);
+  camera.position.set(0, 1.65, 2.5);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
@@ -190,46 +202,10 @@ async function createViewer(el, cam, options = {}) {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-    controls.target.set(0, 1.5, 0); 
+    controls.target.set(0, 1.55, 0); 
     controls.enablePan = false;
     controls.autoRotate = options.autoRotate !== false;
     controls.autoRotateSpeed = 1.5;
-
-    let isEditing = false;
-    let currentTexConfig = null;
-    let isDragging = false;
-    let prevX = 0, prevY = 0;
-
-    renderer.domElement.addEventListener('pointerdown', (e) => {
-      if (isEditing && e.button === 0) {
-        isDragging = true; prevX = e.clientX; prevY = e.clientY;
-        controls.enabled = false;
-      }
-    });
-
-    window.addEventListener('pointermove', (e) => {
-      if (isDragging && isEditing) {
-        const dx = (e.clientX - prevX) * 0.005;
-        const dy = (e.clientY - prevY) * 0.005;
-        prevX = e.clientX; prevY = e.clientY;
-        currentTexConfig.x -= dx; currentTexConfig.y += dy;
-        applyTshirtTexture(model, textures, configs);
-      }
-    });
-
-    window.addEventListener('pointerup', () => {
-      isDragging = false; controls.enabled = true;
-    });
-
-    renderer.domElement.addEventListener('wheel', (e) => {
-      if (isEditing) {
-        e.preventDefault(); e.stopPropagation();
-        const factor = e.deltaY > 0 ? -0.05 : 0.05;
-        currentTexConfig.scale += factor;
-        currentTexConfig.scale = Math.max(0.1, Math.min(5, currentTexConfig.scale));
-        applyTshirtTexture(model, textures, configs);
-      }
-    }, { passive: false, capture: true });
 
     let animId;
     function animate() {
@@ -256,48 +232,30 @@ async function createViewer(el, cam, options = {}) {
         Object.assign(configs, cfgs);
         applyTshirtTexture(model, textures, configs);
       },
-      setMannequinColors(colors) {
-        Object.assign(mannequinColors, colors);
-        applyMannequinColors(model, mannequinColors);
-      },
-      setEditingMode(part) {
-        isEditing = !!part;
-        currentTexConfig = part ? configs[part] : null;
-        controls.enabled = !isEditing; 
-        if (isEditing) controls.autoRotate = false;
-      },
-      setAutoRotate(v) { controls.autoRotate = v; },
-      resetCamera() { camera.position.set(0, 1.8, 3.2); controls.target.set(0, 1.5, 0); controls.update(); },
+      setMannequinColors(colors) { Object.assign(mannequinColors, colors); applyMannequinColors(model, mannequinColors); },
+      setEditingMode(part) { controls.enabled = !part; if (part) controls.autoRotate = false; },
       destroy() { cancelAnimationFrame(animId); ro.disconnect(); controls.dispose(); renderer.dispose(); el.innerHTML = ''; }
     };
   } catch (error) {
-    el.innerHTML = '<p style="padding:20px;color:#ff4d4d;text-align:center;">⚠️ Erro ao carregar modelo.</p>';
+    el.innerHTML = '<p style="padding:20px;color:#ff4d4d;text-align:center;">⚠️ Erro.</p>';
     return null;
   }
 }
 window.__createViewer = createViewer;
 
 // ==========================================
-// INICIALIZAÇÃO
+// CORE: SCROLLTELLING APPLE
 // ==========================================
 async function initApp() {
+  gsap.registerPlugin(ScrollTrigger);
+  
   const data = await apiGet('getAll');
   if (data.ok) {
     state.config = Object.fromEntries(data.config.map(c => [c.CHAVE, c.VALOR]));
     state.camisetas = data.camisetas;
-    
-    if(state.camisetas[0]) {
-      document.getElementById('nome-1').textContent = state.camisetas[0].nome;
-      document.getElementById('desc-1').textContent = state.camisetas[0].descricao;
-    }
-    if(state.camisetas[1]) {
-      document.getElementById('nome-2').textContent = state.camisetas[1].nome;
-      document.getElementById('desc-2').textContent = state.camisetas[1].descricao;
-    }
-    if(state.camisetas[2]) {
-      document.getElementById('nome-3').textContent = state.camisetas[2].nome;
-      document.getElementById('desc-3').textContent = state.camisetas[2].descricao;
-    }
+    if(state.camisetas[0]) { document.getElementById('nome-1').textContent = state.camisetas[0].nome; document.getElementById('desc-1').textContent = state.camisetas[0].descricao; }
+    if(state.camisetas[1]) { document.getElementById('nome-2').textContent = state.camisetas[1].nome; document.getElementById('desc-2').textContent = state.camisetas[1].descricao; }
+    if(state.camisetas[2]) { document.getElementById('nome-3').textContent = state.camisetas[2].nome; document.getElementById('desc-3').textContent = state.camisetas[2].descricao; }
   } else {
     state.camisetas = [
       { id: 1, nome: 'Classic Black', descricao: 'Algodão premium', cor_base: '#111111' },
@@ -306,146 +264,168 @@ async function initApp() {
     ];
   }
 
-  // CRIA OS 3 AMBIENTES (UM PARA CADA SEÇÃO)
-  if (state.camisetas[0]) {
-    const el1 = document.getElementById('canvas-1');
-    state.viewers[0] = await createViewer(el1, state.camisetas[0], { autoRotate: true });
-  }
-  if (state.camisetas[1]) {
-    const el2 = document.getElementById('canvas-2');
-    state.viewers[1] = await createViewer(el2, state.camisetas[1], { autoRotate: true });
-  }
-  if (state.camisetas[2]) {
-    const el3 = document.getElementById('canvas-3');
-    state.viewers[2] = await createViewer(el3, state.camisetas[2], { autoRotate: true });
+  // CONFIGURA O THREE.JS GLOBAL (FUNDO)
+  const container = document.getElementById('webgl-container');
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+  
+  // Câmera inicial afastada e alta
+  camera.position.set(0, 2.5, 8); 
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  container.appendChild(renderer.domElement);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+  const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(2, 5, 4); scene.add(key);
+  const fill = new THREE.DirectionalLight(0xffffff, 1.0); fill.position.set(-4, 3, 2); scene.add(fill);
+  const rim = new THREE.DirectionalLight(0xd4af37, 1.5); rim.position.set(0, 2, -5); scene.add(rim);
+
+  // CARREGA OS 3 MANEQUINS E DISTRIBUI NO ESPAÇO (NÃO LADO A LADO, MAS EM PROFUNDIDADE)
+  const group = new THREE.Group();
+  scene.add(group);
+  
+  const totalModels = Math.min(3, state.camisetas.length);
+  const spacing = 4.0; 
+
+  for (let i = 0; i < totalModels; i++) {
+    const { wrapper } = await buildMannequin(state.camisetas[i]);
+    
+    // O modelo 1 fica no centro (X = 0).
+    // O modelo 2 fica na direita (X = 4).
+    // O modelo 3 fica na esquerda (X = -4).
+    if (i === 0) wrapper.position.set(0, -0.3, 0);
+    if (i === 1) wrapper.position.set(spacing, -0.3, 0);
+    if (i === 2) wrapper.position.set(-spacing, -0.3, 0);
+    
+    group.add(wrapper);
   }
 
-  // Inicia o Painel Admin
+  // Loop de animação
+  function animate() {
+    requestAnimationFrame(animate);
+    const t = performance.now() * 0.001;
+    
+    // Girar todos no próprio eixo continuamente
+    group.children.forEach(child => {
+      child.rotation.y = t * 0.5;
+    });
+
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  // ==========================================
+  // SCROLLTELLING (GSAP TRIGGER)
+  // ==========================================
+  
+  // Fade in dos textos
+  gsap.utils.toArray('.content-box').forEach(box => {
+    ScrollTrigger.create({
+      trigger: box,
+      start: "top 80%",
+      onEnter: () => box.classList.add('visible'),
+      onLeaveBack: () => box.classList.remove('visible')
+    });
+  });
+
+  // Timeline do movimento da câmera (Cinematográfico)
+  const tl = gsap.timeline({
+    scrollTrigger: {
+      trigger: ".scroll-container",
+      start: "top top",
+      end: "bottom bottom",
+      scrub: 1, // Deixa o movimento suave e amarrado ao mouse
+    }
+  });
+
+  // Seção 1 -> Seção 2 (Voa em direção ao Manequim 1)
+  tl.to(camera.position, {
+    x: 0, y: 1.8, z: 3.5,
+    scrollTrigger: { trigger: "#s2", start: "top bottom", end: "top top", scrub: 1 }
+  });
+
+  // Seção 2 -> Seção 3 (Desliza para a direita no Manequim 2)
+  tl.to(camera.position, {
+    x: spacing, y: 1.8, z: 3.5,
+    scrollTrigger: { trigger: "#s3", start: "top bottom", end: "top top", scrub: 1 }
+  });
+
+  // Seção 3 -> Seção 4 (Voa para a esquerda no Manequim 3)
+  tl.to(camera.position, {
+    x: -spacing, y: 1.8, z: 3.5,
+    scrollTrigger: { trigger: "#s4", start: "top bottom", end: "top top", scrub: 1 }
+  });
+
+  // Resize
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    ScrollTrigger.refresh();
+  });
+
   initAdmin();
 }
 
 // ==========================================
-// PAINEL ADMINISTRATIVO
+// PAINEL ADMINISTRATIVO (MANTIDO)
 // ==========================================
 function initAdmin() {
   const ADMIN = { logado: false, abaAtiva: 'config', previewViewer: null };
-
   document.getElementById('lockBtn').onclick = () => {
-    if (ADMIN.logado) {
-      document.getElementById('adminPanel').classList.add('active');
-      renderAdminSidebar(); openAdminTab('config');
-    } else {
-      document.getElementById('loginModal').classList.add('active');
-      document.getElementById('senhaInput').focus();
-    }
+    if (ADMIN.logado) { document.getElementById('adminPanel').classList.add('active'); renderAdminSidebar(); openAdminTab('config'); } 
+    else { document.getElementById('loginModal').classList.add('active'); document.getElementById('senhaInput').focus(); }
   };
-
   document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => document.getElementById('loginModal').classList.remove('active')));
-
   document.getElementById('loginBtn').onclick = () => {
     if (document.getElementById('senhaInput').value.trim() === String(window.__state.config.admin_senha || '20266')) {
-      ADMIN.logado = true;
-      document.getElementById('loginModal').classList.remove('active');
-      document.getElementById('adminPanel').classList.add('active');
-      renderAdminSidebar(); openAdminTab('config');
-      window.__toast('Bem-vindo!');
-    } else {
-      document.getElementById('loginError').textContent = 'Senha incorreta';
-      setTimeout(() => document.getElementById('loginError').textContent = '', 2500);
-    }
+      ADMIN.logado = true; document.getElementById('loginModal').classList.remove('active'); document.getElementById('adminPanel').classList.add('active');
+      renderAdminSidebar(); openAdminTab('config'); window.__toast('Bem-vindo!');
+    } else { document.getElementById('loginError').textContent = 'Senha incorreta'; setTimeout(() => document.getElementById('loginError').textContent = '', 2500); }
   };
-
-  document.getElementById('closeAdmin').onclick = () => {
-    document.getElementById('adminPanel').classList.remove('active'); destroyPreview();
-  };
-
+  document.getElementById('closeAdmin').onclick = () => { document.getElementById('adminPanel').classList.remove('active'); destroyPreview(); };
   function getSenha() { return window.__state.config.admin_senha || '20266'; }
-
   function renderAdminSidebar() {
-    const sidebar = document.getElementById('adminSidebar');
-    sidebar.innerHTML = '';
+    const sidebar = document.getElementById('adminSidebar'); sidebar.innerHTML = '';
     [{ id:'config', label:'⚙️ Textos' }, { id:'camisetas', label:'👕 Modelos' }].forEach(t => {
-      const btn = document.createElement('button');
-      btn.textContent = t.label; btn.dataset.tab = t.id;
+      const btn = document.createElement('button'); btn.textContent = t.label; btn.dataset.tab = t.id;
       btn.onclick = () => openAdminTab(t.id); sidebar.appendChild(btn);
     });
   }
-
   function openAdminTab(tabId) {
-    ADMIN.abaAtiva = tabId;
-    document.querySelectorAll('#adminSidebar button').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
-    const content = document.getElementById('adminContent');
-    content.innerHTML = ''; destroyPreview();
+    ADMIN.abaAtiva = tabId; document.querySelectorAll('#adminSidebar button').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
+    const content = document.getElementById('adminContent'); content.innerHTML = ''; destroyPreview();
     if (tabId === 'config') renderConfigTab(content);
     if (tabId === 'camisetas') renderCamisetasTab(content);
   }
-
   function renderConfigTab(container) {
     const c = window.__state.config;
-    container.innerHTML = `
-      <h2 style="margin-bottom:24px;">Textos do Site</h2>
-      <div class="admin-form" id="configForm">
-        <div><label>Título</label><input name="titulo_site" value="${c.titulo_site || ''}"></div>
-        <div><label>Subtítulo</label><input name="subtitulo_site" value="${c.subtitulo_site || ''}"></div>
-        <button class="btn-primary" id="saveConfigBtn">Salvar</button>
-      </div>`;
+    container.innerHTML = `<h2 style="margin-bottom:24px;">Textos</h2><div class="admin-form" id="configForm"><div><label>Título</label><input name="titulo_site" value="${c.titulo_site || ''}"></div><button class="btn-primary" id="saveConfigBtn">Salvar</button></div>`;
     document.getElementById('saveConfigBtn').onclick = async () => {
       const dados = {}; document.querySelectorAll('#configForm input').forEach(i => dados[i.name] = i.value);
       const r = await window.__apiPost({ action:'updateConfig', senha:getSenha(), dados });
       if (r.ok) { Object.assign(window.__state.config, dados); window.__toast('Salvo!'); }
-      else window.__toast('Erro', true);
     };
   }
-
   function renderCamisetasTab(container) {
-    container.innerHTML = `
-      <h2 style="margin-bottom:24px;">Modelos (${window.__state.camisetas.length})</h2>
-      <div style="display:grid;gap:16px;">
-        ${window.__state.camisetas.map(c => `
-          <div style="border:1px solid var(--border);border-radius:12px;padding:20px;display:flex;gap:20px;align-items:center;">
-            <div style="flex:1;"><strong>${c.nome}</strong></div>
-            <button class="btn-ghost" data-tex="${c.id}">Configurar 3D</button>
-          </div>
-        `).join('')}
-      </div>`;
+    container.innerHTML = `<h2 style="margin-bottom:24px;">Modelos</h2><div style="display:grid;gap:16px;">${window.__state.camisetas.map(c => `<div style="border:1px solid var(--border);border-radius:12px;padding:20px;display:flex;gap:20px;align-items:center;"><div style="flex:1;"><strong>${c.nome}</strong></div><button class="btn-ghost" data-tex="${c.id}">Configurar 3D</button></div>`).join('')}</div>`;
     container.querySelectorAll('[data-tex]').forEach(b => b.onclick = () => editCamisetaTexturas(parseInt(b.dataset.tex)));
   }
-
   function editCamisetaTexturas(id) {
     const c = window.__state.camisetas.find(x => String(x.id) === String(id));
     const content = document.getElementById('adminContent');
-    
-    content.innerHTML = `
-      <h2 style="margin-bottom:16px;">Texturas: ${c.nome}</h2>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
-        <div class="admin-form">
-          <div><label>Frente da Camisa</label><input type="file" data-file="frente"></div>
-          <div><label>Costas da Camisa</label><input type="file" data-file="costas"></div>
-          <button class="btn-primary" id="saveTexSettings">Salvar Estampas</button>
-          <button class="btn-ghost" id="backTexBtn">← Voltar</button>
-        </div>
-        <div><div class="preview-3d" id="adminPreview" style="height: 500px; background: #000;"></div></div>
-      </div>`;
-
+    content.innerHTML = `<h2>Texturas: ${c.nome}</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;"><div class="admin-form"><div><label>Frente</label><input type="file" data-file="frente"></div><div><label>Costas</label><input type="file" data-file="costas"></div><button class="btn-primary">Salvar</button><button class="btn-ghost" id="backTexBtn">← Voltar</button></div><div><div class="preview-3d" id="adminPreview" style="height: 400px; background: #000;"></div></div></div>`;
     document.getElementById('backTexBtn').onclick = () => { destroyPreview(); openAdminTab('camisetas'); };
-
-    initAdminPreview(c).then(() => {
-      window.__loadTexture(c.textura_principal, c.cor_base).then(t => {
-         ADMIN.previewViewer.setTextures(t, null, null, null, ADMIN.previewViewer.configs);
-      });
-    });
+    initAdminPreview(c).then(() => { window.__loadTexture(c.textura_principal, c.cor_base).then(t => { ADMIN.previewViewer.setTextures(t, null, null, null, ADMIN.previewViewer.configs); }); });
   }
-
   async function initAdminPreview(cam) {
-    const el = document.getElementById('adminPreview');
-    destroyPreview();
-    await new Promise(r => setTimeout(r, 60));
+    const el = document.getElementById('adminPreview'); destroyPreview(); await new Promise(r => setTimeout(r, 60));
     ADMIN.previewViewer = await window.__createViewer(el, cam, { autoRotate: true });
   }
-
-  function destroyPreview() {
-    if (ADMIN.previewViewer) { ADMIN.previewViewer.destroy(); ADMIN.previewViewer = null; }
-  }
+  function destroyPreview() { if (ADMIN.previewViewer) { ADMIN.previewViewer.destroy(); ADMIN.previewViewer = null; } }
 }
 
 initApp();
