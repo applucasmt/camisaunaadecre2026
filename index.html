@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Elegance Wear — Experiência 3D</title>
+<title>Elegance Wear — A Nova Era do Estilo</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👕</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -18,61 +18,70 @@
 </head>
 <body>
 
-<header class="header" id="header">
-  <div class="container header-inner">
-    <a href="#" class="logo">ELEGANCE<span>·</span>WEAR</a>
-  </div>
+<!-- HEADER ULTRA CLEAN -->
+<header class="header">
+  <div class="logo">ELEGANCE<span>·</span>WEAR</div>
+  <nav class="nav">
+    <a href="#s1">Início</a>
+    <a href="#s2">Modelo 01</a>
+    <a href="#s3">Modelo 02</a>
+    <a href="#s4">Modelo 03</a>
+  </nav>
 </header>
 
-<!-- CONTAINER PRINCIPAL -->
+<!-- SCROLL CONTAINER (ONDE A MÁGICA ACONTECE) -->
 <div class="scroll-container">
-  
-  <!-- SEÇÃO 1: INTRODUÇÃO (SEM 3D) -->
-  <section class="scroll-section intro-section">
-    <div class="content-box text-center visible">
-      <span class="badge">COLEÇÃO 2026</span>
-      <h1 id="heroTitle">ELEGANCE WEAR</h1>
-      <p id="heroSub">A nova definição de estilo. Role para explorar cada modelo em 3D.</p>
-      <div class="scroll-hint">Role para baixo ⌄</div>
+
+  <!-- CANVAS 3D FIXO (STICKY) -->
+  <div class="canvas-wrapper">
+    <div id="webgl-container"></div>
+    <!-- Overlay para dar foco ao centro e escurecer as bordas (Efeito Cinema) -->
+    <div class="canvas-overlay"></div>
+  </div>
+
+  <!-- SEÇÃO 1: TEXTOS INICIAIS (SEM CAMISA) -->
+  <section class="scroll-section" id="s1">
+    <div class="content-box text-center fade-in">
+      <span class="eyebrow">COLEÇÃO 2026</span>
+      <h1 id="heroTitle">ELEGANCE<br>WEAR</h1>
+      <p id="heroSub">A nova definição de estilo.<br>Role para explorar a coleção em 3D.</p>
+      <div class="scroll-hint">Deslize ⌄</div>
     </div>
   </section>
 
-  <!-- SEÇÃO 2: MODELO 1 -->
-  <section class="scroll-section split-section" id="section-1">
-    <div class="content-box align-left">
+  <!-- SEÇÃO 2: FOCO MANEQUIM 1 (CENTRO) -->
+  <section class="scroll-section" id="s2">
+    <div class="content-box align-left fade-in">
       <span class="eyebrow">MODELO 01</span>
       <h2 id="nome-1">Carregando...</h2>
       <p id="desc-1"></p>
     </div>
-    <div class="canvas-container" id="canvas-1"></div>
   </section>
 
-  <!-- SEÇÃO 3: MODELO 2 -->
-  <section class="scroll-section split-section" id="section-2">
-    <div class="content-box align-left">
+  <!-- SEÇÃO 3: FOCO MANEQUIM 2 (DIREITA) -->
+  <section class="scroll-section" id="s3">
+    <div class="content-box align-right fade-in">
       <span class="eyebrow">MODELO 02</span>
       <h2 id="nome-2">Carregando...</h2>
       <p id="desc-2"></p>
     </div>
-    <div class="canvas-container" id="canvas-2"></div>
   </section>
 
-  <!-- SEÇÃO 4: MODELO 3 -->
-  <section class="scroll-section split-section" id="section-3">
-    <div class="content-box align-left">
+  <!-- SEÇÃO 4: FOCO MANEQUIM 3 (ESQUERDA) -->
+  <section class="scroll-section" id="s4">
+    <div class="content-box align-left fade-in">
       <span class="eyebrow">MODELO 03</span>
       <h2 id="nome-3">Carregando...</h2>
       <p id="desc-3"></p>
-      <button class="btn-primary" onclick="document.getElementById('lockBtn').click()">Editar Modelos</button>
     </div>
-    <div class="canvas-container" id="canvas-3"></div>
   </section>
 
 </div>
 
-<!-- BOTÃO ADMIN E MODAIS (MANTIDOS) -->
+<!-- BOTÃO ADMIN -->
 <button class="lock-btn" id="lockBtn" title="Painel Admin">🔒</button>
 
+<!-- MODAL E PAINEL ADMIN -->
 <div class="modal" id="loginModal">
   <div class="modal-card">
     <h3>Painel Administrativo</h3>
