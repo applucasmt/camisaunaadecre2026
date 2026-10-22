@@ -132,7 +132,7 @@ function applyTshirtTexture(root, textures, configs, corBase) {
         tex.flipY = false; 
         
         mat.map = tex; 
-        mat.color.setHex(0xffffff); // Textura pura (verde fica verde, rosa fica rosa)
+        mat.color.setHex(0xffffff);
       } else { 
         mat.map = null; 
         mat.color.set(corBase || '#ffffff'); 
@@ -160,7 +160,7 @@ function applyMannequinColors(root, colors) {
       const mats = Array.isArray(child.material) ? child.material : [child.material];
       mats.forEach(mat => { 
         if (mat.color) mat.color.set(colorHex).convertSRGBToLinear(); 
-        mat.map = null; // Força a cor sólida (ex: rosa) no corpo
+        mat.map = null; 
         mat.vertexColors = false;
         mat.metalness = 0.1; 
         mat.roughness = 0.7;
@@ -225,14 +225,14 @@ async function buildMannequin(cam) {
   return { wrapper, spinner, model, textures, configs, mannequinColors };
 }
 
-// ============ VIEWER ISOLADO (ADMIN) ============
-async function createViewer(el, cam, options = {}) {
+// ============ VIEWER ISOLADO (ADMIN COM EDIÇÃO INTERATIVA) ============
+async function createAdminViewer(el, cam) {
   const w = el.clientWidth || 400;
   const h = el.clientHeight || 400;
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
-  camera.position.set(0, 1.5, 3.5);
+  camera.position.set(0, 1.4, 3.0);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
@@ -248,16 +248,104 @@ async function createViewer(el, cam, options = {}) {
   const rim = new THREE.DirectionalLight(0xd4af37, 1.8); rim.position.set(0, 2, -5); scene.add(rim);
 
   try {
-    const { wrapper, model, textures, configs, mannequinColors } = await buildMannequin(cam);
+    const { wrapper, spinner, model, textures, configs, mannequinColors } = await buildMannequin(cam);
     scene.add(wrapper);
 
+    // CONTROLES: Botão DIREITO gira o modelo, botão ESQUERDO é desativado para dar lugar ao arrastar da textura
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
+    controls.dampingFactor = 0.1;
     controls.target.set(0, 1.2, 0); 
     controls.enablePan = false;
-    controls.autoRotate = options.autoRotate !== false;
-    controls.autoRotateSpeed = 1.5;
+    controls.autoRotate = false; // Desligado, pois o usuário controla manualmente
+    controls.mouseButtons = {
+      LEFT: null, // Desativado para edição da textura
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.ROTATE // Botão direito rotaciona o personagem
+    };
+
+    // Configuração do Raycaster para editar a textura
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    let isDraggingTexture = false;
+    let previousMousePosition = { x: 0, y: 0 };
+    
+    // Precisamos encontrar a malha da frente da camisa para edição
+    let shirtMesh = null;
+    model.traverse(child => {
+      if (child.isMesh && child.name.toLowerCase().includes('body_front')) {
+        shirtMesh = child;
+      }
+    });
+
+    const domElement = renderer.domElement;
+    
+    domElement.addEventListener('mousedown', (e) => {
+      if (e.button === 0) { // Botão Esquerdo
+        // Verifica se o mouse clicou na camisa
+        const rect = domElement.getBoundingClientRect();
+        mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        
+        raycaster.setFromCamera(mouse, camera);
+        if (shirtMesh) {
+          const intersects = raycaster.intersectObject(shirtMesh, true);
+          if (intersects.length > 0) {
+            isDraggingTexture = true;
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+            domElement.style.cursor = 'grabbing';
+          }
+        }
+      }
+    });
+
+    domElement.addEventListener('mousemove', (e) => {
+      if (isDraggingTexture && textures.frente) {
+        const deltaX = (e.clientX - previousMousePosition.x) / w;
+        const deltaY = (e.clientY - previousMousePosition.y) / h;
+        
+        // Inverte X pois o offset da textura é oposto ao movimento
+        configs.frente.x -= deltaX * 1.5; 
+        configs.frente.y += deltaY * 1.5;
+        
+        textures.frente.offset.set(configs.frente.x, configs.frente.y);
+        previousMousePosition = { x: e.clientX, y: e.clientY };
+      }
+    });
+
+    domElement.addEventListener('mouseup', () => {
+      isDraggingTexture = false;
+      domElement.style.cursor = 'default';
+    });
+
+    domElement.addEventListener('wheel', (e) => {
+      if (e.button === 0 && textures.frente) {
+        // Precisamos verificar se o mouse está sobre a camisa
+        const rect = domElement.getBoundingClientRect();
+        mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        
+        raycaster.setFromCamera(mouse, camera);
+        if (shirtMesh) {
+          const intersects = raycaster.intersectObject(shirtMesh, true);
+          if (intersects.length > 0) {
+            e.preventDefault(); // Impede rolagem da página
+            const zoomFactor = 0.05;
+            if (e.deltaY < 0) {
+              configs.frente.scale += zoomFactor; // Zoom in
+            } else {
+              configs.frente.scale -= zoomFactor; // Zoom out
+            }
+            configs.frente.scale = Math.max(0.1, Math.min(5, configs.frente.scale)); // Limites
+            
+            textures.frente.repeat.set(0.6 * configs.frente.scale, 0.6 * configs.frente.scale);
+          }
+        }
+      }
+    });
+
+    // Desabilita o menu de contexto ao clicar com o botão direito
+    domElement.addEventListener('contextmenu', e => e.preventDefault());
 
     let animId;
     function animate() {
@@ -279,16 +367,26 @@ async function createViewer(el, cam, options = {}) {
     return {
       scene, camera, renderer, wrapper, controls, model, textures, configs, mannequinColors,
       setTextures(f, c, m, g, cfgs, corBase) {
-        textures.frente = f || textures.frente;
-        textures.costas = c || textures.costas;
-        textures.manga = m || textures.manga;
-        textures.gola = g || textures.gola;
+        if(f) {
+          textures.frente = f;
+          // Reseta os configs visuais para a nova textura
+          configs.frente.x = 0;
+          configs.frente.y = 0;
+          configs.frente.scale = 1;
+        }
+        if(c) textures.costas = c;
+        if(m) textures.manga = m;
+        if(g) textures.gola = g;
+        
         Object.assign(configs, cfgs);
         applyTshirtTexture(model, textures, configs, corBase);
       },
       setColors(colors) {
         Object.assign(mannequinColors, colors);
         applyMannequinColors(model, mannequinColors);
+      },
+      getConfigs() {
+        return configs;
       },
       destroy() { 
         cancelAnimationFrame(animId); 
@@ -303,7 +401,7 @@ async function createViewer(el, cam, options = {}) {
     return null;
   }
 }
-window.__createViewer = createViewer;
+window.__createViewer = createAdminViewer; // Substitui a função original para o painel
 
 // ==========================================
 // CORE: CÂMERA CINEMATOGRÁFICA E SCROLL
@@ -440,7 +538,7 @@ async function initApp() {
 }
 
 // ==========================================
-// PAINEL ADMINISTRATIVO (COMPLETO RESTAURADO)
+// PAINEL ADMINISTRATIVO (COM CONTROLES INTERATIVOS)
 // ==========================================
 function initAdmin() {
   const ADMIN = { logado: false, abaAtiva: 'config', previewViewer: null };
@@ -544,27 +642,34 @@ function initAdmin() {
   }
   
   // ==========================================
-  // EDIÇÃO DE MODELO 3D, TEXTURAS E CORES
+  // EDIÇÃO INTERATIVA (MOUSE)
   // ==========================================
   function editCamisetaTexturas(id) {
     const c = window.__state.camisetas.find(x => String(x.id) === String(id));
     const content = document.getElementById('adminContent');
     
-    // Formulário Completo com URLs, Uploads, Cores e Posições
     content.innerHTML = `
       <h2>Configurar: ${c.nome}</h2>
+      
+      <div style="background: #1a1a1a; border: 1px solid var(--accent); padding: 16px; border-radius: 12px; margin-bottom: 24px; display:flex; gap:20px; align-items:center;">
+        <div style="font-size: 24px;">🖱️</div>
+        <div style="flex:1; font-size:0.9rem; line-height:1.4;">
+          <strong style="color:var(--accent);">Controles Interativos:</strong><br>
+          <b>Botão Esquerdo (Arrastar):</b> Move a textura.<br>
+          <b>Scroll do Mouse:</b> Aumenta/Diminui o zoom da textura.<br>
+          <b>Botão Direito (Arrastar):</b> Gira o manequim.
+        </div>
+      </div>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
         
-        <div class="admin-form" style="max-height: 70vh; overflow-y: auto; padding-right: 10px;">
-          
+        <div class="admin-form">
           <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
             <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Textura Frente</h3>
             <div><label>URL da Imagem</label><input type="text" id="urlFrente" value="${c.textura_principal || ''}" placeholder="https://..."></div>
             <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileFrente"></div>
-            <div style="display:flex; gap:8px; margin-top:8px;">
-              <div style="flex:1"><label>X</label><input type="number" step="0.1" id="x_frente" value="${c.x_frente || 0}"></div>
-              <div style="flex:1"><label>Y</label><input type="number" step="0.1" id="y_frente" value="${c.y_frente || 0}"></div>
-              <div style="flex:1"><label>Escala</label><input type="number" step="0.1" id="scale_frente" value="${c.scale_frente || 1}"></div>
+            <div style="margin-top:12px; font-size:0.85rem; color:var(--text-dim);">
+              Offset Atual: X (${c.x_frente || 0}) | Y (${c.y_frente || 0}) | Escala (${c.scale_frente || 1})
             </div>
           </div>
 
@@ -572,11 +677,6 @@ function initAdmin() {
             <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Textura Costas</h3>
             <div><label>URL da Imagem</label><input type="text" id="urlCostas" value="${c.textura_costas || ''}" placeholder="https://..."></div>
             <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileCostas"></div>
-            <div style="display:flex; gap:8px; margin-top:8px;">
-              <div style="flex:1"><label>X</label><input type="number" step="0.1" id="x_costas" value="${c.x_costas || 0}"></div>
-              <div style="flex:1"><label>Y</label><input type="number" step="0.1" id="y_costas" value="${c.y_costas || 0}"></div>
-              <div style="flex:1"><label>Escala</label><input type="number" step="0.1" id="scale_costas" value="${c.scale_costas || 1}"></div>
-            </div>
           </div>
 
           <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
@@ -594,7 +694,7 @@ function initAdmin() {
         </div>
 
         <div>
-          <div class="preview-3d" id="adminPreview" style="height: 100%; min-height: 500px; background: #000; border-radius:12px;"></div>
+          <div class="preview-3d" id="adminPreview" style="height: 100%; min-height: 500px; background: #000; border-radius:12px; overflow:hidden;"></div>
         </div>
       </div>
     `;
@@ -604,43 +704,25 @@ function initAdmin() {
       openAdminTab('camisetas'); 
     };
 
-    // Inicia o Preview 3D
     initAdminPreview(c).then(() => {
       if(!ADMIN.previewViewer) return;
 
-      // Funções para atualizar em tempo real
-      const applyCurrent = () => {
-        ADMIN.previewViewer.setColors({
-          corpo: document.getElementById('corCorpo').value,
-          cabelo: document.getElementById('corCabelo').value,
-          calca: document.getElementById('corCalca').value
-        });
-        ADMIN.previewViewer.setTextures(
-          ADMIN.previewViewer.textures.frente, 
-          ADMIN.previewViewer.textures.costas, 
-          ADMIN.previewViewer.textures.manga, 
-          ADMIN.previewViewer.textures.gola, 
-          {
-            frente: { scale: parseFloat(document.getElementById('scale_frente').value)||1, x: parseFloat(document.getElementById('x_frente').value)||0, y: parseFloat(document.getElementById('y_frente').value)||0 },
-            costas: { scale: parseFloat(document.getElementById('scale_costas').value)||1, x: parseFloat(document.getElementById('x_costas').value)||0, y: parseFloat(document.getElementById('y_costas').value)||0 },
-            manga: { scale: 1, x: 0, y: 0 },
-            gola: { scale: 1, x: 0, y: 0 }
-          },
-          document.getElementById('corBase').value
-        );
+      // Cores em tempo real
+      ['corCorpo', 'corCabelo', 'corCalca'].forEach(id => {
+        document.getElementById(id).oninput = () => {
+          ADMIN.previewViewer.setColors({
+            corpo: document.getElementById('corCorpo').value,
+            cabelo: document.getElementById('corCabelo').value,
+            calca: document.getElementById('corCalca').value
+          });
+        };
+      });
+
+      document.getElementById('corBase').oninput = () => {
+        ADMIN.previewViewer.setTextures(null, null, null, null, ADMIN.previewViewer.configs, document.getElementById('corBase').value);
       };
 
-      // Color inputs
-      ['corCorpo', 'corCabelo', 'corCalca', 'corBase'].forEach(id => {
-        document.getElementById(id).oninput = applyCurrent;
-      });
-
-      // Position inputs
-      ['x_frente', 'y_frente', 'scale_frente', 'x_costas', 'y_costas', 'scale_costas'].forEach(id => {
-        document.getElementById(id).oninput = applyCurrent;
-      });
-
-      // Upload Frente
+      // Uploads
       document.getElementById('fileFrente').onchange = (e) => {
         const file = e.target.files[0];
         if (file) {
@@ -652,7 +734,6 @@ function initAdmin() {
         }
       };
 
-      // Upload Costas
       document.getElementById('fileCostas').onchange = (e) => {
         const file = e.target.files[0];
         if (file) {
@@ -664,7 +745,7 @@ function initAdmin() {
         }
       };
 
-      // URL Inputs (aplica ao sair do campo)
+      // URLs
       document.getElementById('urlFrente').onchange = (e) => {
         window.__loadTexture(e.target.value, c.cor_base).then(t => {
           ADMIN.previewViewer.setTextures(t, null, null, null, ADMIN.previewViewer.configs, document.getElementById('corBase').value);
@@ -676,17 +757,16 @@ function initAdmin() {
         });
       };
 
-      // Salvar no Banco de Dados (API)
+      // Salvar (Pega os valores atuais do THREE.js após a edição por mouse)
       document.getElementById('saveCamisetaBtn').onclick = async () => {
+        const cfg = ADMIN.previewViewer.getConfigs().frente;
+        
         const dados = {
           textura_principal: document.getElementById('urlFrente').value,
           textura_costas: document.getElementById('urlCostas').value,
-          x_frente: document.getElementById('x_frente').value,
-          y_frente: document.getElementById('y_frente').value,
-          scale_frente: document.getElementById('scale_frente').value,
-          x_costas: document.getElementById('x_costas').value,
-          y_costas: document.getElementById('y_costas').value,
-          scale_costas: document.getElementById('scale_costas').value,
+          x_frente: cfg.x,
+          y_frente: cfg.y,
+          scale_frente: cfg.scale,
           cor_corpo: document.getElementById('corCorpo').value,
           cor_cabelo: document.getElementById('corCabelo').value,
           cor_calca: document.getElementById('corCalca').value,
@@ -707,7 +787,7 @@ function initAdmin() {
     const el = document.getElementById('adminPreview'); 
     destroyPreview(); 
     await new Promise(r => setTimeout(r, 60));
-    ADMIN.previewViewer = await window.__createViewer(el, cam, { autoRotate: true });
+    ADMIN.previewViewer = await window.__createViewer(el, cam);
   }
   
   function destroyPreview() { 
