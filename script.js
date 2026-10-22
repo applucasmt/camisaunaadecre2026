@@ -178,7 +178,6 @@ async function createViewer(el, cam, options = {}) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 1000);
   
-  // Câmera puxada para trás (2.5) e mais alta
   camera.position.set(0, 1.65, 2.5);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -200,7 +199,6 @@ async function createViewer(el, cam, options = {}) {
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     
-    // Alvo no topo (cabeça)
     controls.target.set(0, 1.55, 0); 
     controls.minDistance = 0.1;
     controls.maxDistance = Infinity;
@@ -301,7 +299,7 @@ async function createViewer(el, cam, options = {}) {
 }
 window.__createViewer = createViewer;
 
-// ============ HERO VIEWER (SLIDER LATERAL) ============
+// ============ HERO VIEWER (SLIDER LATERAL COM ZOOM MÁXIMO) ============
 async function initHeroViewer() {
   const el = document.getElementById('heroViewer');
   if (!el || state.camisetas.length === 0) return;
@@ -312,15 +310,14 @@ async function initHeroViewer() {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
   
-  // CÂMERA MAIS PRÓXIMA (Z = 2.2) E MAIS ALTA (Y = 1.9)
-  // O Z 2.2 deixa o boneco bem grande, preenchendo o container.
-  camera.position.set(0, 1.9, 2.2); 
+  // ZOOM AUMENTADO 2X: Câmera super próxima (Z = 1.2) e focada no peito (Y = 1.6)
+  camera.position.set(0, 1.6, 1.2); 
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.domElement.style.pointerEvents = 'none'; // Sem interação com o mouse no Hero
+  renderer.domElement.style.pointerEvents = 'none'; 
   
   el.appendChild(renderer.domElement);
 
@@ -331,12 +328,13 @@ async function initHeroViewer() {
 
   const wrappers = [];
   const totalModels = Math.min(3, state.camisetas.length);
-  const spacing = 2.2; 
+  // Aumentando o espaçamento para eles não se sobreporem com o zoom alto
+  const spacing = 2.8; 
 
   for (let i = 0; i < totalModels; i++) {
     const { wrapper } = await buildMannequin(state.camisetas[i]);
     wrapper.position.x = (i - 1) * spacing; 
-    wrapper.position.y = -0.3; // Mantém a base
+    wrapper.position.y = -0.3; 
     scene.add(wrapper);
     wrappers.push(wrapper);
   }
@@ -393,10 +391,9 @@ async function initHeroViewer() {
       }
     }
 
-    // Posição da câmera
     camera.position.x = currentCameraX;
-    camera.position.y = 1.9; // Altura da câmera
-    camera.lookAt(currentCameraX, 1.6, 0); // Olha para o peito/camisa
+    camera.position.y = 1.6; // Foco na altura do peito
+    camera.lookAt(currentCameraX, 1.4, 0); 
     
     wrappers.forEach((w, i) => {
       if (i === currentIndex) {
