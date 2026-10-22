@@ -10,7 +10,6 @@ const $ = (s, r = document) => r.querySelector(s);
 window.__state = state;
 window.THREE = THREE;
 
-// SISTEMA DE NOTIFICAÇÃO (TOAST)
 function toast(msg, isError = false) {
   let el = $('#toast');
   if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; document.body.appendChild(el); }
@@ -102,6 +101,7 @@ function applyTshirtTexture(root, textures, configs) {
   });
 }
 
+// ============ FUNÇÃO DE CORES AJUSTADA (sRGB) ============
 function applyMannequinColors(root, colors) {
   root.traverse(child => {
     if (!child.isMesh) return;
@@ -116,7 +116,13 @@ function applyMannequinColors(root, colors) {
 
     if (colorHex) {
       const mats = Array.isArray(child.material) ? child.material : [child.material];
-      mats.forEach(mat => { mat.color.set(colorHex); mat.needsUpdate = true; });
+      mats.forEach(mat => {
+        // A MÁGICA ACONTECE AQUI: Converte a cor sRGB do HTML para Linear do Three.js
+        if (mat.color) {
+          mat.color.set(colorHex).convertSRGBToLinear(); 
+        }
+        mat.needsUpdate = true;
+      });
     }
   });
 }
@@ -126,10 +132,8 @@ async function createViewer(el, cam, options = {}) {
   const h = el.clientHeight || 400;
 
   const scene = new THREE.Scene();
-  // REMOVIDO O FUNDO ESCURO PARA FICAR TRANSPARENTE E MISTURAR COM O SITE
   const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 1000);
   
-  // CÂMERA MAIS PRÓXIMA (FOCO NO BUSTO/CAMISA)
   camera.position.set(0, 1.2, 2.2);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -192,10 +196,7 @@ async function createViewer(el, cam, options = {}) {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-    
-    // ALVO DO FOCO: Altura do peito para cima
     controls.target.set(0, 1.3, 0);
-    
     controls.minDistance = 0.1;
     controls.maxDistance = Infinity;
     controls.enablePan = false;
