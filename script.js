@@ -9,7 +9,7 @@ window.__state = state;
 window.THREE = THREE;
 
 // ==========================================
-// HELPERS E CORS (CORRIGIDO)
+// HELPERS E ENVIO DE DADOS (SEM ERRO DE CORS)
 // ==========================================
 function toast(msg, isError = false) {
   let el = document.getElementById('toast') || document.createElement('div');
@@ -28,6 +28,7 @@ async function apiGet(action = 'getAll') {
 
 async function apiPost(payload) {
   try {
+    // SOLUÇÃO DEFINITIVA PARA O CORS DO GOOGLE APPS SCRIPT
     const formData = new URLSearchParams();
     formData.append('payload', JSON.stringify(payload));
     const r = await fetch(API_URL, {
@@ -36,7 +37,10 @@ async function apiPost(payload) {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' }
     });
     return await r.json();
-  } catch (e) { return { ok: false }; }
+  } catch (e) { 
+    console.error("Erro POST:", e);
+    return { ok: false }; 
+  }
 }
 window.__apiPost = apiPost;
 
@@ -75,7 +79,7 @@ async function loadTexture(url, fallbackColor) {
 window.__loadTexture = loadTexture;
 
 // ==========================================
-// MODELO 3D
+// MANIPULAÇÃO DO MODELO 3D E TEXTURAS
 // ==========================================
 const WHITE_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 let gltfPromise = null;
@@ -360,14 +364,13 @@ async function initApp() {
 }
 
 // ==========================================
-// PAINEL ADMINISTRATIVO EMBUTIDO (O CADEADO)
+// PAINEL ADMINISTRATIVO (CADEADO)
 // ==========================================
 function initAdminPanel() {
   const lockBtn = document.getElementById('lockBtn');
   const loginModal = document.getElementById('loginModal');
   const adminPanel = document.getElementById('adminPanel');
 
-  // FORÇA O CLIQUE A SER CAPTURADO
   if (lockBtn) {
     lockBtn.addEventListener('click', (e) => {
       e.preventDefault();
@@ -585,10 +588,28 @@ function initAdminPanel() {
           });
           document.getElementById(inputId).value = base64; 
           
+          // Atualiza a Imagem no Preview
           loadTexture(base64, c.cor_base).then(t => {
             const args = { frente: [t, null, null, null], costas: [null, t, null, null], manga: [null, null, t, null], gola: [null, null, null, t] }[textureKey];
             state.adminViewer.setTextures(...args, state.adminViewer.getConfigs(), document.getElementById('corBase').value);
           });
+
+          // Salva no Google Drive via Apps Script
+          const r = await apiPost({
+            action: 'uploadImagem',
+            senha: state.config.admin_senha || '20266',
+            camiseta_id: c.id,
+            tipo: textureKey,
+            base64: base64,
+            filename: file.name,
+            mimeType: file.type
+          });
+
+          if (r.ok) {
+            toast('Imagem salva no Drive!', false);
+          } else {
+            toast('Erro ao salvar imagem: ' + (r.error || 'Desconhecido'), true);
+          }
         }
       };
 
@@ -656,7 +677,7 @@ function initAdminPanel() {
 }
 
 // ==========================================
-// CRIADOR DO PREVIEW 3D DO ADMIN
+// PREVIEW 3D EXCLUSIVO DO ADMIN
 // ==========================================
 async function createAdminViewer(el, cam) {
   const w = el.clientWidth || 400;
@@ -847,7 +868,7 @@ async function createAdminViewer(el, cam) {
 }
 
 // ==========================================
-// CARREGAMENTO DO GSAP E BOOT
+// GSAP E BOOT
 // ==========================================
 function loadGSAP() {
   return new Promise((resolve, reject) => {
@@ -871,6 +892,5 @@ loadGSAP().then(() => {
   initApp();
 }).catch(err => {
   console.error('Erro ao carregar GSAP:', err);
-  // Mesmo sem GSAP, o site e o painel devem abrir
-  initApp();
+  initApp(); // Inicia mesmo se o GSAP falhar
 });
