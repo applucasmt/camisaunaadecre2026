@@ -3,10 +3,12 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="Apresentação 3D interativa da coleção de camisetas. Gire, aproxime e explore cada detalhe." />
 <title>Elegance Wear — Apresentação 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
-<!-- IMPORT MAP PARA THREE.JS -->
 <script type="importmap">
 {
   "imports": {
@@ -18,6 +20,7 @@
 </head>
 <body>
 
+<!-- ================= HEADER ================= -->
 <header class="header" id="header">
   <div class="container header-inner">
     <a href="#" class="logo" id="siteLogo">ELEGANCE<span>·</span>WEAR</a>
@@ -32,6 +35,7 @@
   </div>
 </header>
 
+<!-- ================= HERO ================= -->
 <section class="hero" id="hero">
   <div class="container hero-inner">
     <div class="hero-text">
@@ -42,6 +46,7 @@
       <div class="hero-hint">
         <span>🖱️ Arraste para girar</span>
         <span>🔍 Scroll para zoom</span>
+        <span>👆 Pinça no celular</span>
       </div>
     </div>
     <div class="hero-canvas-wrap">
@@ -49,8 +54,10 @@
       <div class="viewer-badge">Manequim 3D interativo</div>
     </div>
   </div>
+  <div class="scroll-hint">⌄</div>
 </section>
 
+<!-- ================= SHOWCASE ================= -->
 <section class="showcase" id="showcase">
   <div class="container">
     <div class="section-head">
@@ -58,24 +65,34 @@
       <h2>Explore os 3 modelos</h2>
       <p>Clique em "Explorar em 3D" para interagir com o manequim.</p>
     </div>
-    <div class="products-grid" id="productsGrid"></div>
+    <div class="products-grid" id="productsGrid">
+      <!-- preenchido via JS -->
+    </div>
   </div>
 </section>
 
+<!-- ================= SOBRE ================= -->
 <section class="sobre" id="sobre">
   <div class="container sobre-inner">
     <div class="sobre-text">
       <span class="eyebrow">SOBRE A COLEÇÃO</span>
       <h2>Apresentação visual em tempo real</h2>
       <p>Uma vitrine 3D interativa para apresentar cada peça: você pode girar o manequim, aproximar para ver detalhes das texturas e avaliar a modelagem antes de conhecer pessoalmente.</p>
+      <ul class="features">
+        <li>✦ Manequim 3D real com geometria de corpo humano</li>
+        <li>✦ Rotação, zoom e pan interativos</li>
+        <li>✦ Texturas trocadas dinamicamente</li>
+      </ul>
     </div>
     <div class="sobre-visual">
       <div class="stat-card"><strong>3D</strong><span>Manequins interativos</span></div>
       <div class="stat-card"><strong>360°</strong><span>Rotação livre</span></div>
+      <div class="stat-card"><strong>HD</strong><span>Texturas em alta resolução</span></div>
     </div>
   </div>
 </section>
 
+<!-- ================= FOOTER ================= -->
 <footer class="footer">
   <div class="container footer-inner">
     <div>
@@ -86,7 +103,7 @@
   </div>
 </footer>
 
-<!-- VIEWER MODAL -->
+<!-- ================= VIEWER MODAL (FULLSCREEN) ================= -->
 <div class="viewer-modal" id="viewerModal">
   <div class="viewer-modal-header">
     <div>
@@ -97,14 +114,18 @@
   </div>
   <div class="viewer-modal-body">
     <div id="fullViewer" class="viewer full"></div>
+    
+    <!-- CONTROLES DO MODAL (INCLUINDO ZOOM) -->
     <div class="viewer-controls">
+      <button class="btn-ghost" id="zoomOut" title="Afastar">➖ Zoom</button>
       <button class="btn-ghost" id="resetView">Resetar câmera</button>
       <button class="btn-ghost" id="toggleAuto" data-paused="0">Pausar rotação</button>
+      <button class="btn-ghost" id="zoomIn" title="Aproximar">➕ Zoom</button>
     </div>
   </div>
 </div>
 
-<!-- LOGIN MODAL -->
+<!-- ================= LOGIN MODAL ================= -->
 <div class="modal" id="loginModal">
   <div class="modal-card">
     <h3>Painel Administrativo</h3>
@@ -118,7 +139,7 @@
   </div>
 </div>
 
-<!-- ADMIN PANEL -->
+<!-- ================= ADMIN PANEL ================= -->
 <div class="admin-panel" id="adminPanel">
   <div class="admin-header">
     <h2>🎛️ Painel Administrativo</h2>
@@ -130,7 +151,6 @@
   </div>
 </div>
 
-<!-- CARREGA OS SCRIPTS COMO MÓDULOS -->
 <script type="module" src="script.js"></script>
 <script type="module" src="admin.js"></script>
 </body>
