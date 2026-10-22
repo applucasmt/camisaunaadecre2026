@@ -197,6 +197,7 @@ function setupUpload(cam) {
       if (ADMIN.previewViewer) {
         const tex = new THREE.TextureLoader().load(dataUrl);
         tex.colorSpace = THREE.SRGBColorSpace;
+        tex.flipY = false;
         ADMIN.previewViewer.setTexture(tex);
       }
 
@@ -215,6 +216,7 @@ function setupUpload(cam) {
           if (window.__state.productViewers[cam.id]) {
             const tex = new THREE.TextureLoader().load(r.url);
             tex.colorSpace = THREE.SRGBColorSpace;
+            tex.flipY = false;
             window.__state.productViewers[cam.id].setTexture(tex);
           }
         } else {
