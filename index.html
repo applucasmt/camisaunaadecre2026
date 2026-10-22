@@ -18,29 +18,28 @@
 </head>
 <body>
 
+<!-- HEADER MINIMALISTA (SEM MENU) -->
 <header class="header">
   <div class="logo">ELEGANCE<span>·</span>WEAR</div>
-  <nav class="nav">
-    <a href="#s1">Início</a>
-    <a href="#s2">Modelo 01</a>
-    <a href="#s3">Modelo 02</a>
-    <a href="#s4">Modelo 03</a>
-  </nav>
 </header>
 
+<!-- SCROLL CONTAINER -->
 <div class="scroll-container">
 
+  <!-- CANVAS 3D FIXO (FUNDO) -->
   <div class="canvas-wrapper">
     <div id="webgl-container"></div>
     <div class="canvas-overlay"></div>
   </div>
 
-  <!-- S1: HERO (Visão Geral dos 3) -->
+  <!-- S1: HERO / INÍCIO -->
   <section class="scroll-section" id="s1">
     <div class="content-box text-center fade-in">
       <span class="eyebrow">COLEÇÃO 2026</span>
       <h1 id="heroTitle">ELEGANCE<br>WEAR</h1>
-      <p id="heroSub">A nova definição de estilo.<br>Role para explorar a coleção em 3D.</p>
+      
+      <p class="instruction-text">Deslize para ver os modelos</p>
+      
       <div class="scroll-hint">Deslize ⌄</div>
     </div>
   </section>
@@ -54,7 +53,7 @@
     </div>
   </section>
 
-  <!-- S3: ROTAÇÃO DO MODELO 1 (Costas) -->
+  <!-- S3: ROTAÇÃO DO MODELO 1 (COSTAS) -->
   <section class="scroll-section" id="s3">
     <div class="content-box align-left fade-in">
       <span class="eyebrow">VISTA TRASEIRA</span>
@@ -72,7 +71,7 @@
     </div>
   </section>
 
-  <!-- S5: ROTAÇÃO DO MODELO 2 -->
+  <!-- S5: ROTAÇÃO DO MODELO 2 (COSTAS) -->
   <section class="scroll-section" id="s5">
     <div class="content-box align-right fade-in">
       <span class="eyebrow">VISTA TRASEIRA</span>
@@ -101,9 +100,10 @@
 
 </div>
 
+<!-- BOTÃO ADMIN -->
 <button class="lock-btn" id="lockBtn" title="Painel Admin">🔒</button>
 
-<!-- MODAL E ADMIN (Mantidos) -->
+<!-- MODAL DE LOGIN -->
 <div class="modal" id="loginModal">
   <div class="modal-card">
     <h3>Painel Administrativo</h3>
@@ -117,6 +117,7 @@
   </div>
 </div>
 
+<!-- PAINEL ADMINISTRATIVO -->
 <div class="admin-panel" id="adminPanel">
   <div class="admin-header">
     <h2>🎛️ Painel Administrativo</h2>
