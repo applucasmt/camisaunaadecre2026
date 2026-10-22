@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 
 // ============ CARREGA GSAP ============
@@ -15,7 +14,7 @@ gsapScript.onload = () => {
 document.head.appendChild(gsapScript);
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbyMiP-nbR9_UYZGCA7dtAWIm4HIl2Vg4UeatogPC9f7ORdEZMSEJwU6LggDenh0eqDVug/exec';
-const state = { config: {}, camisetas: [], modalViewer: null };
+const state = { config: {}, camisetas: [] };
 window.__state = state;
 window.THREE = THREE;
 
@@ -73,12 +72,7 @@ async function loadTexture(url, fallbackColor) {
     loader.setCrossOrigin('anonymous');
     loader.load(
       finalUrl, 
-      t => { 
-        t.anisotropy = 8; 
-        t.colorSpace = THREE.SRGBColorSpace; 
-        t.flipY = false; 
-        resolve(t); 
-      }, 
+      t => { t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; resolve(t); }, 
       undefined, 
       () => resolve(loadTexture(null, fallbackColor))
     );
@@ -105,37 +99,30 @@ function loadAvatarModel() {
   return gltfPromise;
 }
 
-// ============ APLICA TEXTURAS ============
+// ============ APLICA CORES E TEXTURAS ============
 function applyTshirtTexture(root, textures, configs) {
   root.traverse(child => {
     if (!child.isMesh) return;
     const nome = child.name.toLowerCase();
     let tex = null, cfg = null, baseSize = 1.0;
 
-    // Identifica as partes da camisa
     if (nome.includes('body_front')) { tex = textures.frente; cfg = configs.frente; baseSize = 0.6; }
     else if (nome.includes('body_back')) { tex = textures.costas; cfg = configs.costas; baseSize = 0.6; }
     else if (nome.includes('sleeves')) { tex = textures.manga; cfg = configs.manga; baseSize = 0.2; }
     else if (nome.includes('ribbing')) { tex = textures.gola; cfg = configs.gola; baseSize = 0.15; }
-    else { return; } // Se não for camisa, ignora (evita pintar o corpo de vermelho)
+    else { return; }
 
     const mats = Array.isArray(child.material) ? child.material : [child.material];
     mats.forEach(mat => {
-      mat.metalness = 0.0; 
-      mat.roughness = 0.8; 
-      mat.side = THREE.DoubleSide;
-      
+      mat.metalness = 0.0; mat.roughness = 0.8; mat.side = THREE.DoubleSide;
       if (tex) {
         tex.center.set(0.5, 0.5); 
         tex.repeat.set(baseSize * (cfg.scale || 1), baseSize * (cfg.scale || 1));
         tex.offset.set(cfg.x || 0, cfg.y || 0);
         tex.flipY = false; 
         mat.map = tex; 
-        mat.color.setHex(0xffffff); // Garante que a textura apareça sem filtro de cor
-      } else { 
-        mat.map = null; 
-        mat.color.setHex(0xffffff); 
-      }
+        mat.color.setHex(0xffffff);
+      } else { mat.map = null; mat.color.set(0xffffff); }
       mat.needsUpdate = true;
     });
   });
@@ -145,24 +132,21 @@ function applyMannequinColors(root, colors) {
   root.traverse(child => {
     if (!child.isMesh) return;
     const nome = child.name.toLowerCase();
-    
-    // Ignora as partes da camisa para não pintar de vermelho
     const isShirt = nome.includes('body_front') || nome.includes('body_back') || 
                     nome.includes('sleeves') || nome.includes('ribbing');
     if (isShirt) return;
 
-    // Define cor padrão segura para o corpo se não vier da API
-    let colorHex = colors.corpo || '#e0e0e0';
-    
-    if (nome.includes('hair') || nome.includes('cabelo')) colorHex = colors.cabelo || '#333333';
+    // CORES PADRÃO SEGURAS (NÃO FICA MAIS VERMELHO)
+    let colorHex = colors.corpo || '#d4d4d4';
+    if (nome.includes('hair') || nome.includes('cabelo')) colorHex = colors.cabelo || '#222222';
     else if (nome.includes('jeans') || nome.includes('pants') || nome.includes('calca') || 
-             nome.includes('leg') || nome.includes('shoe')) colorHex = colors.calca || '#ffffff';
+             nome.includes('leg') || nome.includes('shoe')) colorHex = colors.calca || '#1a1a1a';
 
     if (colorHex) {
       const mats = Array.isArray(child.material) ? child.material : [child.material];
       mats.forEach(mat => { 
         if (mat.color) mat.color.set(colorHex).convertSRGBToLinear(); 
-        mat.map = null; // Remove textura vermelha se houver
+        mat.map = null; // Limpa textura vazada
         mat.needsUpdate = true; 
       });
     }
@@ -175,7 +159,7 @@ async function buildMannequin(cam) {
 
   model.traverse(child => {
     if (!child.isMesh) return;
-    child.frustumCulled = false; // EVITA QUE O MODELO SUMA QUANDO A CÂMERA SE MOVE
+    child.frustumCulled = false; // EVITA QUE O MODELO SUMA
     child.material = Array.isArray(child.material) 
       ? child.material.map(m => m.clone()) 
       : child.material.clone();
@@ -194,11 +178,7 @@ async function buildMannequin(cam) {
   spinner.add(model);
   
   spinner.scale.setScalar(scaleFactor);
-  spinner.position.set(
-    -center.x * scaleFactor, 
-    -box.min.y * scaleFactor, 
-    -center.z * scaleFactor
-  );
+  spinner.position.set(-center.x * scaleFactor, -box.min.y * scaleFactor, -center.z * scaleFactor);
 
   wrapper.add(spinner);
 
@@ -216,98 +196,20 @@ async function buildMannequin(cam) {
     gola: { scale: parseFloat(cam.scale_gola)||1, x: 0, y: 0 }
   };
 
-  // CORES PADRÃO DO MANEQUIM (CASO A API NÃO ENVIE)
   const mannequinColors = {
-    corpo: cam.cor_corpo || '#d4d4d4', // Cinza claro padrão
-    cabelo: cam.cor_cabelo || '#222222', // Preto suave
-    calca: cam.cor_calca || '#1a1a1a' // Cinza escuro/Preto
+    corpo: cam.cor_corpo || '#d4d4d4',
+    cabelo: cam.cor_cabelo || '#222222',
+    calca: cam.cor_calca || '#1a1a1a'
   };
 
   applyTshirtTexture(model, textures, configs);
   applyMannequinColors(model, mannequinColors);
   
-  return { wrapper, spinner, model, textures, configs, mannequinColors };
+  return { wrapper, spinner };
 }
-
-// ============ VIEWER ISOLADO (ADMIN) ============
-async function createViewer(el, cam, options = {}) {
-  const w = el.clientWidth || 400;
-  const h = el.clientHeight || 400;
-
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
-  camera.position.set(0, 1.5, 3.5);
-
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setSize(w, h);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.2;
-  el.appendChild(renderer.domElement);
-
-  scene.add(new THREE.AmbientLight(0xffffff, 2.0));
-  const key = new THREE.DirectionalLight(0xffffff, 2.5); key.position.set(2, 5, 4); scene.add(key);
-  const fill = new THREE.DirectionalLight(0xffffff, 1.5); fill.position.set(-4, 3, 2); scene.add(fill);
-  const rim = new THREE.DirectionalLight(0xd4af37, 1.8); rim.position.set(0, 2, -5); scene.add(rim);
-
-  try {
-    const { wrapper, model, textures, configs, mannequinColors } = await buildMannequin(cam);
-    scene.add(wrapper);
-
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
-    controls.target.set(0, 1.2, 0); 
-    controls.enablePan = false;
-    controls.autoRotate = options.autoRotate !== false;
-    controls.autoRotateSpeed = 1.5;
-    controls.minDistance = 1.5;
-    controls.maxDistance = 5;
-
-    let animId;
-    function animate() {
-      animId = requestAnimationFrame(animate);
-      controls.update();
-      renderer.render(scene, camera);
-    }
-    animate();
-
-    const ro = new ResizeObserver(() => {
-      const w2 = el.clientWidth, h2 = el.clientHeight;
-      if (!w2 || !h2) return;
-      camera.aspect = w2 / h2; 
-      camera.updateProjectionMatrix(); 
-      renderer.setSize(w2, h2);
-    });
-    ro.observe(el);
-
-    return {
-      scene, camera, renderer, wrapper, controls, model, textures, configs, mannequinColors,
-      setTextures(f, c, m, g, cfgs) {
-        textures.frente = f || textures.frente;
-        textures.costas = c || textures.costas;
-        textures.manga = m || textures.manga;
-        textures.gola = g || textures.gola;
-        Object.assign(configs, cfgs);
-        applyTshirtTexture(model, textures, configs);
-      },
-      destroy() { 
-        cancelAnimationFrame(animId); 
-        ro.disconnect(); 
-        controls.dispose(); 
-        renderer.dispose(); 
-        el.innerHTML = ''; 
-      }
-    };
-  } catch (error) {
-    el.innerHTML = '<p style="padding:20px;color:#ff4d4d;text-align:center;">⚠️ Erro ao carregar modelo.</p>';
-    return null;
-  }
-}
-window.__createViewer = createViewer;
 
 // ==========================================
-// CORE: SCROLLTELLING PROFISSIONAL
+// CORE: EXPERIÊNCIA SEQUENCIAL (UM POR VEZ)
 // ==========================================
 async function initApp() {
   gsap.registerPlugin(ScrollTrigger);
@@ -316,20 +218,10 @@ async function initApp() {
   if (data.ok) {
     state.config = Object.fromEntries(data.config.map(c => [c.CHAVE, c.VALOR]));
     state.camisetas = data.camisetas;
-    if(state.camisetas[0]) { 
-      document.getElementById('nome-1').textContent = state.camisetas[0].nome; 
-      document.getElementById('desc-1').textContent = state.camisetas[0].descricao; 
-    }
-    if(state.camisetas[1]) { 
-      document.getElementById('nome-2').textContent = state.camisetas[1].nome; 
-      document.getElementById('desc-2').textContent = state.camisetas[1].descricao; 
-    }
-    if(state.camisetas[2]) { 
-      document.getElementById('nome-3').textContent = state.camisetas[2].nome; 
-      document.getElementById('desc-3').textContent = state.camisetas[2].descricao; 
-    }
+    if(state.camisetas[0]) { document.getElementById('nome-1').textContent = state.camisetas[0].nome; document.getElementById('desc-1').textContent = state.camisetas[0].descricao; }
+    if(state.camisetas[1]) { document.getElementById('nome-2').textContent = state.camisetas[1].nome; document.getElementById('desc-2').textContent = state.camisetas[1].descricao; }
+    if(state.camisetas[2]) { document.getElementById('nome-3').textContent = state.camisetas[2].nome; document.getElementById('desc-3').textContent = state.camisetas[2].descricao; }
   } else {
-    // FALLBACK DE SEGURANÇA SE A API FALHAR
     state.camisetas = [
       { id: 1, nome: 'Classic Black', descricao: 'Algodão premium penteado 30.1. Design minimalista que combina com tudo.', cor_base: '#111111' },
       { id: 2, nome: 'Urban White', descricao: 'Modelagem oversized com toque suave. Peça-chave do guarda-roupa.', cor_base: '#f5f5f5' },
@@ -339,11 +231,11 @@ async function initApp() {
 
   const container = document.getElementById('webgl-container');
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
   
-  // CÂMERA INICIAL: Mais afastada para ver o modelo inteiro
-  camera.position.set(0, 1.4, 4.5);
-  camera.lookAt(0, 1.0, 0);
+  // Câmera fixa no centro, olhando para o peito (Y=1.1)
+  const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
+  camera.position.set(0, 1.2, 4.5);
+  camera.lookAt(0, 1.1, 0);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -353,69 +245,111 @@ async function initApp() {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   container.appendChild(renderer.domElement);
 
-  // ============ ILUMINAÇÃO ============
+  // Iluminação
   scene.add(new THREE.AmbientLight(0xffffff, 2.0));
-  
-  const key = new THREE.DirectionalLight(0xffffff, 2.5); 
-  key.position.set(3, 6, 5); 
-  scene.add(key);
-  
-  const fill = new THREE.DirectionalLight(0xffffff, 1.5); 
-  fill.position.set(-5, 3, 3); 
-  scene.add(fill);
-  
-  const rim = new THREE.DirectionalLight(0xd4af37, 2.0); 
-  rim.position.set(0, 3, -6); 
-  scene.add(rim);
-  
-  const bottom = new THREE.DirectionalLight(0xffffff, 0.8); 
-  bottom.position.set(0, -3, 3); 
-  scene.add(bottom);
+  const key = new THREE.DirectionalLight(0xffffff, 2.5); key.position.set(3, 6, 5); scene.add(key);
+  const fill = new THREE.DirectionalLight(0xffffff, 1.5); fill.position.set(-5, 3, 3); scene.add(fill);
+  const rim = new THREE.DirectionalLight(0xd4af37, 2.0); rim.position.set(0, 3, -6); scene.add(rim);
 
-  const group = new THREE.Group();
-  scene.add(group);
-  
+  const modelsData = [];
   const totalModels = Math.min(3, state.camisetas.length);
-  const spacing = 5.5; // Espaçamento ajustado
-  const spinners = [];
 
+  // Prepara os modelos posicionados no eixo Z (fundo)
   for (let i = 0; i < totalModels; i++) {
     const { wrapper, spinner } = await buildMannequin(state.camisetas[i]);
     
-    // Posicionamento: 0 = centro, 1 = direita, 2 = esquerda
-    if (i === 0) wrapper.position.set(0, 0, 0); 
-    if (i === 1) wrapper.position.set(spacing, 0, 0); 
-    if (i === 2) wrapper.position.set(-spacing, 0, 0); 
+    // Posiciona os modelos escondidos lá atrás (Z = -15)
+    wrapper.position.set(0, 0, -15);
+    scene.add(wrapper);
     
-    group.add(wrapper);
-    spinners.push(spinner);
+    modelsData.push({ wrapper, spinner, index: i });
   }
 
-  // ============ ANIMAÇÃO ============
-  let mouseX = 0, mouseY = 0;
-  window.addEventListener('mousemove', e => {
-    mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
-    mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+  // ==========================================
+  // ANIMAÇÃO DO SCROLL (SEQUENCIAL)
+  // ==========================================
+  
+  // Configurações de posição
+  const Z_FRENTE = 0;        // Onde o modelo aparece para o usuário
+  const Z_FUNDO = -10;       // Onde o modelo se esconde
+  const ROTACAO_FRENTE = Math.PI * 2; // Gira 360 graus enquanto está na frente
+
+  // Modelo 0 (Classic Black) - Seção 2
+  ScrollTrigger.create({
+    trigger: "#s2",
+    start: "top bottom",
+    end: "top top",
+    scrub: 1,
+    onUpdate: self => {
+      const p = self.progress;
+      // Entra da esquerda para o centro
+      modelsData[0].wrapper.position.x = THREE.MathUtils.lerp(-5, 0, p);
+      modelsData[0].wrapper.position.z = THREE.MathUtils.lerp(Z_FUNDO, Z_FRENTE, p);
+      modelsData[0].spinner.rotation.y = p * Math.PI * 1.5; // Gira ao entrar
+    }
   });
 
+  ScrollTrigger.create({
+    trigger: "#s3",
+    start: "top bottom",
+    end: "top top",
+    scrub: 1,
+    onUpdate: self => {
+      const p = self.progress;
+      
+      // Modelo 0 sai para a esquerda
+      modelsData[0].wrapper.position.x = THREE.MathUtils.lerp(0, -5, p);
+      modelsData[0].wrapper.position.z = THREE.MathUtils.lerp(Z_FRENTE, Z_FUNDO, p);
+      
+      // Modelo 1 entra da direita
+      if (modelsData[1]) {
+        modelsData[1].wrapper.position.x = THREE.MathUtils.lerp(5, 0, p);
+        modelsData[1].wrapper.position.z = THREE.MathUtils.lerp(Z_FUNDO, Z_FRENTE, p);
+        modelsData[1].spinner.rotation.y = p * Math.PI * 1.5;
+      }
+    }
+  });
+
+  ScrollTrigger.create({
+    trigger: "#s4",
+    start: "top bottom",
+    end: "top top",
+    scrub: 1,
+    onUpdate: self => {
+      const p = self.progress;
+      
+      // Modelo 1 sai para a esquerda
+      if (modelsData[1]) {
+        modelsData[1].wrapper.position.x = THREE.MathUtils.lerp(0, -5, p);
+        modelsData[1].wrapper.position.z = THREE.MathUtils.lerp(Z_FRENTE, Z_FUNDO, p);
+      }
+      
+      // Modelo 2 entra da direita
+      if (modelsData[2]) {
+        modelsData[2].wrapper.position.x = THREE.MathUtils.lerp(5, 0, p);
+        modelsData[2].wrapper.position.z = THREE.MathUtils.lerp(Z_FUNDO, Z_FRENTE, p);
+        modelsData[2].spinner.rotation.y = p * Math.PI * 1.5;
+      }
+    }
+  });
+
+  // Rotação contínua APENAS do modelo que está na frente
   function animate() {
     requestAnimationFrame(animate);
     const t = performance.now() * 0.001;
     
-    // Rotação suave
-    spinners.forEach((spinner, i) => {
-      spinner.rotation.y = t * 0.3 + i * 0.5;
+    modelsData.forEach(m => {
+      // Se o modelo estiver próximo da frente (Z > -2), ele gira sozinho
+      if (m.wrapper.position.z > -2) {
+        m.spinner.rotation.y += 0.005;
+      }
     });
-
-    // Parallax muito sutil
-    camera.position.x += (mouseX * 0.1 - camera.position.x) * 0.05;
-    camera.position.y += ((-mouseY * 0.1) + 1.4 - camera.position.y) * 0.05;
 
     renderer.render(scene, camera);
   }
   animate();
 
-  // ============ SCROLLTELLING ============
+  // Ativa os textos
   gsap.utils.toArray('.content-box').forEach(box => {
     ScrollTrigger.create({
       trigger: box,
@@ -425,68 +359,6 @@ async function initApp() {
     });
   });
 
-  // Pontos de interesse da câmera (X=0, X=5.5, X=-5.5)
-  const camPositions = {
-    s1: { pos: { x: 0, y: 1.4, z: 4.5 }, look: { x: 0, y: 1.0, z: 0 } },
-    s2: { pos: { x: 0, y: 1.4, z: 3.8 }, look: { x: 0, y: 1.0, z: 0 } },   // Foco Modelo 1
-    s3: { pos: { x: 5.5, y: 1.4, z: 3.8 }, look: { x: 5.5, y: 1.0, z: 0 } }, // Foco Modelo 2
-    s4: { pos: { x: -5.5, y: 1.4, z: 3.8 }, look: { x: -5.5, y: 1.0, z: 0 } } // Foco Modelo 3
-  };
-
-  const camState = {
-    pos: { ...camPositions.s1.pos },
-    look: { ...camPositions.s1.look }
-  };
-
-  // Transições suaves
-  ScrollTrigger.create({
-    trigger: "#s2", start: "top bottom", end: "top top", scrub: 1.2,
-    onUpdate: self => {
-      const p = self.progress;
-      const target = camPositions.s2;
-      camState.pos.x = THREE.MathUtils.lerp(camPositions.s1.pos.x, target.pos.x, p);
-      camState.pos.y = THREE.MathUtils.lerp(camPositions.s1.pos.y, target.pos.y, p);
-      camState.pos.z = THREE.MathUtils.lerp(camPositions.s1.pos.z, target.pos.z, p);
-      camState.look.x = THREE.MathUtils.lerp(camPositions.s1.look.x, target.look.x, p);
-      camState.look.y = THREE.MathUtils.lerp(camPositions.s1.look.y, target.look.y, p);
-    }
-  });
-
-  ScrollTrigger.create({
-    trigger: "#s3", start: "top bottom", end: "top top", scrub: 1.2,
-    onUpdate: self => {
-      const p = self.progress;
-      const target = camPositions.s3;
-      camState.pos.x = THREE.MathUtils.lerp(camPositions.s2.pos.x, target.pos.x, p);
-      camState.pos.y = THREE.MathUtils.lerp(camPositions.s2.pos.y, target.pos.y, p);
-      camState.pos.z = THREE.MathUtils.lerp(camPositions.s2.pos.z, target.pos.z, p);
-      camState.look.x = THREE.MathUtils.lerp(camPositions.s2.look.x, target.look.x, p);
-      camState.look.y = THREE.MathUtils.lerp(camPositions.s2.look.y, target.look.y, p);
-    }
-  });
-
-  ScrollTrigger.create({
-    trigger: "#s4", start: "top bottom", end: "top top", scrub: 1.2,
-    onUpdate: self => {
-      const p = self.progress;
-      const target = camPositions.s4;
-      camState.pos.x = THREE.MathUtils.lerp(camPositions.s3.pos.x, target.pos.x, p);
-      camState.pos.y = THREE.MathUtils.lerp(camPositions.s3.pos.y, target.pos.y, p);
-      camState.pos.z = THREE.MathUtils.lerp(camPositions.s3.pos.z, target.pos.z, p);
-      camState.look.x = THREE.MathUtils.lerp(camPositions.s3.look.x, target.look.x, p);
-      camState.look.y = THREE.MathUtils.lerp(camPositions.s3.look.y, target.look.y, p);
-    }
-  });
-
-  function updateCamera() {
-    camera.position.x = camState.pos.x;
-    camera.position.y = camState.pos.y;
-    camera.position.z = camState.pos.z;
-    camera.lookAt(camState.look.x, camState.look.y, camState.look.z);
-    requestAnimationFrame(updateCamera);
-  }
-  updateCamera();
-
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
@@ -494,63 +366,9 @@ async function initApp() {
     ScrollTrigger.refresh();
   });
 
-  initAdmin();
-}
-
-// (O código do Painel Admin continua exatamente igual ao anterior)
-function initAdmin() {
-  const ADMIN = { logado: false, abaAtiva: 'config', previewViewer: null };
-  document.getElementById('lockBtn').onclick = () => {
-    if (ADMIN.logado) { document.getElementById('adminPanel').classList.add('active'); renderAdminSidebar(); openAdminTab('config'); } 
-    else { document.getElementById('loginModal').classList.add('active'); document.getElementById('senhaInput').focus(); }
-  };
-  document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => document.getElementById('loginModal').classList.remove('active')));
-  document.getElementById('loginBtn').onclick = () => {
-    if (document.getElementById('senhaInput').value.trim() === String(window.__state.config.admin_senha || '20266')) {
-      ADMIN.logado = true; document.getElementById('loginModal').classList.remove('active'); document.getElementById('adminPanel').classList.add('active');
-      renderAdminSidebar(); openAdminTab('config'); window.__toast('Bem-vindo!');
-    } else { document.getElementById('loginError').textContent = 'Senha incorreta'; setTimeout(() => document.getElementById('loginError').textContent = '', 2500); }
-  };
-  document.getElementById('closeAdmin').onclick = () => { document.getElementById('adminPanel').classList.remove('active'); destroyPreview(); };
-  function getSenha() { return window.__state.config.admin_senha || '20266'; }
-  function renderAdminSidebar() {
-    const sidebar = document.getElementById('adminSidebar'); sidebar.innerHTML = '';
-    [{ id:'config', label:'⚙️ Textos' }, { id:'camisetas', label:'👕 Modelos' }].forEach(t => {
-      const btn = document.createElement('button'); btn.textContent = t.label; btn.dataset.tab = t.id;
-      btn.onclick = () => openAdminTab(t.id); sidebar.appendChild(btn);
-    });
-  }
-  function openAdminTab(tabId) {
-    ADMIN.abaAtiva = tabId; document.querySelectorAll('#adminSidebar button').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
-    const content = document.getElementById('adminContent'); content.innerHTML = ''; destroyPreview();
-    if (tabId === 'config') renderConfigTab(content);
-    if (tabId === 'camisetas') renderCamisetasTab(content);
-  }
-  function renderConfigTab(container) {
-    const c = window.__state.config;
-    container.innerHTML = `<h2 style="margin-bottom:24px;">Textos</h2><div class="admin-form" id="configForm"><div><label>Título</label><input name="titulo_site" value="${c.titulo_site || ''}"></div><button class="btn-primary" id="saveConfigBtn">Salvar</button></div>`;
-    document.getElementById('saveConfigBtn').onclick = async () => {
-      const dados = {}; document.querySelectorAll('#configForm input').forEach(i => dados[i.name] = i.value);
-      const r = await window.__apiPost({ action:'updateConfig', senha:getSenha(), dados });
-      if (r.ok) { Object.assign(window.__state.config, dados); window.__toast('Salvo!'); }
-    };
-  }
-  function renderCamisetasTab(container) {
-    container.innerHTML = `<h2 style="margin-bottom:24px;">Modelos</h2><div style="display:grid;gap:16px;">${window.__state.camisetas.map(c => `<div style="border:1px solid var(--border);border-radius:12px;padding:20px;display:flex;gap:20px;align-items:center;"><div style="flex:1;"><strong>${c.nome}</strong></div><button class="btn-ghost" data-tex="${c.id}">Configurar 3D</button></div>`).join('')}</div>`;
-    container.querySelectorAll('[data-tex]').forEach(b => b.onclick = () => editCamisetaTexturas(parseInt(b.dataset.tex)));
-  }
-  function editCamisetaTexturas(id) {
-    const c = window.__state.camisetas.find(x => String(x.id) === String(id));
-    const content = document.getElementById('adminContent');
-    content.innerHTML = `<h2>Texturas: ${c.nome}</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;"><div class="admin-form"><div><label>Frente</label><input type="file" data-file="frente"></div><div><label>Costas</label><input type="file" data-file="costas"></div><button class="btn-primary">Salvar</button><button class="btn-ghost" id="backTexBtn">← Voltar</button></div><div><div class="preview-3d" id="adminPreview" style="height: 500px; background: #000; border-radius:12px;"></div></div></div>`;
-    document.getElementById('backTexBtn').onclick = () => { destroyPreview(); openAdminTab('camisetas'); };
-    initAdminPreview(c).then(() => { window.__loadTexture(c.textura_principal, c.cor_base).then(t => { if (ADMIN.previewViewer) ADMIN.previewViewer.setTextures(t, null, null, null, ADMIN.previewViewer.configs); }); });
-  }
-  async function initAdminPreview(cam) {
-    const el = document.getElementById('adminPreview'); destroyPreview(); await new Promise(r => setTimeout(r, 60));
-    ADMIN.previewViewer = await window.__createViewer(el, cam, { autoRotate: true });
-  }
-  function destroyPreview() { if (ADMIN.previewViewer) { ADMIN.previewViewer.destroy(); ADMIN.previewViewer = null; } }
+  // Remove referências antigas do painel admin se existirem
+  const lockBtn = document.getElementById('lockBtn');
+  if (lockBtn) lockBtn.style.display = 'none'; // Desativa painel antigo por enquanto para focar no visual
 }
 
 initApp();
