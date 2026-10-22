@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // ⚠️ COLE AQUI A URL DO SEU WEB APP DO GOOGLE APPS SCRIPT
-const API_URL = 'https://script.google.com/macros/s/SEU_ID_AQUI/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbxnUijRFoBQZqxjPNtcjercaHiO5oIxmMViYEC4tC_DLgxApjOjTw9WCU4Fb8NSJKf7/exec';
 
 const state = {
   config: {},
