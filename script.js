@@ -66,18 +66,24 @@ function loadAvatarModel() {
   return gltfPromise;
 }
 
-// ============ APLICAR TEXTURAS (LIVRE E SEM TRAVAS) ============
+// ============ APLICAR TEXTURAS (CENTRALIZADO E COM TAMANHOS BASE) ============
 function applyTshirtTexture(root, textures, configs) {
   root.traverse(child => {
     if (!child.isMesh) return;
     const nome = child.name.toLowerCase();
     
     let tex = null, cfg = null;
-    if (nome.includes('body_front')) { tex = textures.frente; cfg = configs.frente; }
-    else if (nome.includes('body_back')) { tex = textures.costas; cfg = configs.costas; }
-    else if (nome.includes('sleeves')) { tex = textures.manga; cfg = configs.manga; }
-    else if (nome.includes('ribbing')) { tex = textures.gola; cfg = configs.gola; }
-    else { return; }
+    let baseSize = 1.0;
+
+    if (nome.includes('body_front')) { 
+      tex = textures.frente; cfg = configs.frente; baseSize = 0.6; // Tamanho padrão para frente
+    } else if (nome.includes('body_back')) { 
+      tex = textures.costas; cfg = configs.costas; baseSize = 0.6; // Tamanho padrão para costas
+    } else if (nome.includes('sleeves')) { 
+      tex = textures.manga; cfg = configs.manga; baseSize = 0.2; // Mangas são menores
+    } else if (nome.includes('ribbing')) { 
+      tex = textures.gola; cfg = configs.gola; baseSize = 0.15; // Gola é bem pequena
+    } else { return; }
 
     const mats = Array.isArray(child.material) ? child.material : [child.material];
     mats.forEach(mat => {
@@ -86,31 +92,18 @@ function applyTshirtTexture(root, textures, configs) {
       mat.side = THREE.DoubleSide;
 
       if (tex) {
-        // Cria uma matriz de transformação independente para o offset e escala
-        const matrix = new THREE.Matrix3();
-        // Move para o centro (0.5, 0.5)
-        matrix.set(
-          1, 0, 0.5,
-          0, 1, 0.5,
-          0, 0, 1
-        );
-        // Aplica a translação (posição do mouse)
-        const translation = new THREE.Matrix3().set(
-          1, 0, cfg.x || 0,
-          0, 1, cfg.y || 0,
-          0, 0, 1
-        );
-        // Aplica a escala (zoom do scroll)
-        const scale = new THREE.Matrix3().set(
-          cfg.scale || 1, 0, 0,
-          0, cfg.scale || 1, 0,
-          0, 0, 1
-        );
-        // Aplica a rotação de 180 no Y (pois invertemos o flipY)
-        matrix.multiply(translation).multiply(scale);
+        // Centralização perfeita nativa do Three.js
+        tex.center.set(0.5, 0.5); 
+        
+        // Aplica o tamanho base junto com o zoom do scroll
+        tex.repeat.set(baseSize * (cfg.scale || 1), baseSize * (cfg.scale || 1));
+        
+        // Aplica a posição (X e Y) ajustada pelo mouse
+        tex.offset.set(cfg.x || 0, cfg.y || 0);
+        
+        // O flipY precisa ser ajustado para o padrão ao usar offset
+        tex.flipY = false; 
 
-        tex.matrixAutoUpdate = false;
-        tex.matrix.copy(matrix);
         mat.map = tex;
         mat.color.setHex(0xffffff);
       } else {
@@ -128,7 +121,7 @@ function applyMannequinColors(root, colors) {
     const nome = child.name.toLowerCase();
     
     const isShirt = nome.includes('body_front') || nome.includes('body_back') || nome.includes('sleeves') || nome.includes('ribbing');
-    if (isShirt) return; // Ignora a camisa
+    if (isShirt) return;
 
     let colorHex = null;
     if (nome.includes('hair') || nome.includes('cabelo')) {
@@ -136,7 +129,6 @@ function applyMannequinColors(root, colors) {
     } else if (nome.includes('jeans') || nome.includes('pants') || nome.includes('calca') || nome.includes('leg') || nome.includes('shoe')) {
       colorHex = colors.calca;
     } else {
-      // Tudo que não é camisa, nem cabelo, nem calça é corpo (pele)
       colorHex = colors.corpo;
     }
 
@@ -150,7 +142,6 @@ function applyMannequinColors(root, colors) {
   });
 }
 
-// ============ CRIAR VIEWER ============
 async function createViewer(el, cam, options = {}) {
   const w = el.clientWidth || 400;
   const h = el.clientHeight || 400;
@@ -246,7 +237,6 @@ async function createViewer(el, cam, options = {}) {
         const dy = (e.clientY - prevY) * 0.005;
         prevX = e.clientX; prevY = e.clientY;
         
-        // Ajuste de direção para ficar natural
         currentTexConfig.x -= dx; 
         currentTexConfig.y += dy;
         
@@ -371,10 +361,10 @@ async function renderProducts() {
       if (viewerEl) { state.productViewers[cam.id] = await createViewer(viewerEl, cam, { autoRotate: true }); }
     }, 200 * idx);
     card.querySelector('[data-explore]').onclick = async () => {
-      const modal = document.getElementById('viewerModal');
+      const viewerModal = document.getElementById('viewerModal');
       document.getElementById('viewerTitle').textContent = cam.nome;
       document.getElementById('viewerDesc').textContent = cam.descricao || '';
-      modal.classList.add('active');
+      viewerModal.classList.add('active');
       if (state.modalViewer) { state.modalViewer.destroy(); state.modalViewer = null; }
       const el = document.getElementById('fullViewer');
       await new Promise(r => setTimeout(r, 60));
