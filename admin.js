@@ -77,7 +77,7 @@ function renderCamisetasTab(container) {
       ${window.__state.camisetas.map(c => `
         <div style="border:1px solid var(--border);border-radius:12px;padding:20px;display:flex;gap:20px;align-items:center;">
           <div style="flex:1;"><strong>${c.nome}</strong></div>
-          <button class="btn-ghost" data-tex="${c.id}">Configurar Texturas</button>
+          <button class="btn-ghost" data-tex="${c.id}">Configurar 3D</button>
         </div>
       `).join('')}
     </div>`;
@@ -89,49 +89,120 @@ function editCamisetaTexturas(id) {
   const content = document.getElementById('adminContent');
   
   content.innerHTML = `
-    <h2 style="margin-bottom:16px;">Texturas: ${c.nome}</h2>
+    <h2 style="margin-bottom:16px;">Ajustes: ${c.nome}</h2>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
       <div class="admin-form">
         
-        <div style="display:flex; gap:10px; margin-bottom:20px; padding:15px; background:rgba(255,255,255,0.05); border-radius:8px; border:1px solid var(--border);">
-          <button class="btn-ghost mode-btn" id="modeRotate" style="flex:1;">🔄 Girar Modelo</button>
-          <button class="btn-ghost mode-btn active" id="modeEdit" style="flex:1; border-color:var(--secondary); color:var(--secondary);">✏️ Ajustar Estampa</button>
+        <!-- ABAS PRINCIPAIS (ESTAMPAS vs CORES) -->
+        <div style="display:flex; gap:10px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:10px;">
+          <button class="btn-ghost tab-main active" id="tabEstampas" style="flex:1;">🎨 Estampas</button>
+          <button class="btn-ghost tab-main" id="tabCores" style="flex:1;">👤 Cores do Manequim</button>
         </div>
 
-        <div style="display:flex; gap:5px; margin-bottom:20px; flex-wrap:wrap;" id="part-buttons">
-          <button class="btn-ghost part-btn active" data-part="frente">Frente</button>
-          <button class="btn-ghost part-btn" data-part="costas">Costas</button>
-          <button class="btn-ghost part-btn" data-part="manga">Mangas</button>
-          <button class="btn-ghost part-btn" data-part="gola">Gola</button>
+        <!-- CONTEÚDO: ESTAMPAS -->
+        <div id="contentEstampas">
+          <div style="display:flex; gap:10px; margin-bottom:20px; padding:15px; background:rgba(255,255,255,0.05); border-radius:8px;">
+            <button class="btn-ghost mode-btn" id="modeRotate" style="flex:1;">🔄 Girar</button>
+            <button class="btn-ghost mode-btn active" id="modeEdit" style="flex:1; border-color:var(--secondary); color:var(--secondary);">✏️ Mover Estampa</button>
+          </div>
+
+          <div style="display:flex; gap:5px; margin-bottom:20px; flex-wrap:wrap;" id="part-buttons">
+            <button class="btn-ghost part-btn active" data-part="frente">Frente</button>
+            <button class="btn-ghost part-btn" data-part="costas">Costas</button>
+            <button class="btn-ghost part-btn" data-part="manga">Mangas</button>
+            <button class="btn-ghost part-btn" data-part="gola">Gola</button>
+          </div>
+
+          <div id="part-inputs">
+            ${['frente', 'costas', 'manga', 'gola'].map(part => `
+              <div class="upload-zone" data-upload="${part}" style="display:${part==='frente'?'block':'none'};">
+                <input type="file" accept="image/*" data-file="${part}">
+                <p>📤 Upload de Imagem (${part})</p>
+                <p class="upload-status" data-status="${part}" style="color:var(--secondary);font-size:.8rem;"></p>
+              </div>
+            `).join('')}
+          </div>
+
+          <div id="edit-instructions" style="margin-top:20px; padding:15px; border:1px dashed var(--secondary); border-radius:8px; text-align:center; background:rgba(212,175,55,0.05);">
+            <p style="font-size:0.85rem; color:var(--text-dim); margin-bottom:8px;">Modo Ajuste Ativo</p>
+            <strong style="color:var(--secondary); font-size:1.1rem;" id="editLabel">Ajustando: Frente</strong><br>
+            <span style="font-size:0.8rem; display:block; margin-top:8px; line-height:1.4;">
+              <b>Arraste</b> com o botão esquerdo para mover.<br>
+              Role o <b>Scroll</b> para aumentar/diminuir.
+            </span>
+          </div>
+
+          <button class="btn-primary" id="saveTexSettings" style="margin-top:20px;">Salvar Ajustes de Estampa</button>
         </div>
 
-        <div id="part-inputs">
-          ${['frente', 'costas', 'manga', 'gola'].map(part => `
-            <div class="upload-zone" data-upload="${part}" style="display:${part==='frente'?'block':'none'};">
-              <input type="file" accept="image/*" data-file="${part}">
-              <p>📤 Upload de Imagem (${part})</p>
-              <p class="upload-status" data-status="${part}" style="color:var(--secondary);font-size:.8rem;"></p>
+        <!-- CONTEÚDO: CORES DO MANEQUIM -->
+        <div id="contentCores" style="display:none;">
+          <p style="color:var(--text-dim); font-size:.9rem; margin-bottom:20px;">Altere a cor do corpo, cabelo e calça do manequim.</p>
+          
+          <div style="display:flex; flex-direction:column; gap:15px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-alt); padding:15px; border-radius:8px;">
+              <label>Cor do Corpo</label>
+              <input type="color" id="colorCorpo" value="${c.cor_corpo || '#e0e0e0'}" style="width:50px; height:40px; border:none; border-radius:5px; cursor:pointer;">
             </div>
-          `).join('')}
+            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-alt); padding:15px; border-radius:8px;">
+              <label>Cor do Cabelo</label>
+              <input type="color" id="colorCabelo" value="${c.cor_cabelo || '#333333'}" style="width:50px; height:40px; border:none; border-radius:5px; cursor:pointer;">
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-alt); padding:15px; border-radius:8px;">
+              <label>Cor da Calça</label>
+              <input type="color" id="colorCalca" value="${c.cor_calca || '#ffffff'}" style="width:50px; height:40px; border:none; border-radius:5px; cursor:pointer;">
+            </div>
+          </div>
+
+          <button class="btn-primary" id="saveColorSettings" style="margin-top:20px;">Salvar Cores</button>
         </div>
 
-        <div id="edit-instructions" style="margin-top:20px; padding:15px; border:1px dashed var(--secondary); border-radius:8px; text-align:center; background:rgba(212,175,55,0.05);">
-          <p style="font-size:0.85rem; color:var(--text-dim); margin-bottom:8px;">Modo Ajuste Ativo</p>
-          <strong style="color:var(--secondary); font-size:1.1rem;" id="editLabel">Ajustando: Frente</strong><br>
-          <span style="font-size:0.8rem; display:block; margin-top:8px; line-height:1.4;">
-            <b>Arraste</b> com o botão esquerdo do mouse para mover.<br>
-            Role o <b>Scroll</b> para aumentar/diminuir.
-          </span>
-        </div>
-
-        <button class="btn-primary" id="saveTexSettings" style="margin-top:20px;">Salvar Todos os Ajustes</button>
-        <button class="btn-ghost" id="backTexBtn">← Voltar</button>
+        <button class="btn-ghost" id="backTexBtn" style="margin-top:20px;">← Voltar</button>
       </div>
       <div><div class="preview-3d" id="adminPreview"></div></div>
     </div>`;
 
   document.getElementById('backTexBtn').onclick = () => { destroyPreview(); openAdminTab('camisetas'); };
 
+  // Controle das Abas Principais
+  const tabEstampas = document.getElementById('tabEstampas');
+  const tabCores = document.getElementById('tabCores');
+  const contentEstampas = document.getElementById('contentEstampas');
+  const contentCores = document.getElementById('contentCores');
+
+  tabEstampas.onclick = () => {
+    tabEstampas.classList.add('active'); tabCores.classList.remove('active');
+    contentEstampas.style.display = 'block'; contentCores.style.display = 'none';
+  };
+  tabCores.onclick = () => {
+    tabCores.classList.add('active'); tabEstampas.classList.remove('active');
+    contentCores.style.display = 'block'; contentEstampas.style.display = 'none';
+  };
+
+  // Lógica de Cores
+  const updateColors = () => {
+    if (!ADMIN.previewViewer) return;
+    ADMIN.previewViewer.setMannequinColors({
+      corpo: document.getElementById('colorCorpo').value,
+      cabelo: document.getElementById('colorCabelo').value,
+      calca: document.getElementById('colorCalca').value
+    });
+  };
+  document.getElementById('colorCorpo').oninput = updateColors;
+  document.getElementById('colorCabelo').oninput = updateColors;
+  document.getElementById('colorCalca').oninput = updateColors;
+
+  document.getElementById('saveColorSettings').onclick = async () => {
+    const dados = {
+      cor_corpo: document.getElementById('colorCorpo').value,
+      cor_cabelo: document.getElementById('colorCabelo').value,
+      cor_calca: document.getElementById('colorCalca').value
+    };
+    const r = await window.__apiPost({ action:'updateCamiseta', senha:getSenha(), id: c.id, dados });
+    if(r.ok) { Object.assign(c, dados); window.__toast('Cores salvas!'); }
+  };
+
+  // Lógica de Estampas
   let currentPart = 'frente';
   let isEditMode = true;
 
@@ -147,11 +218,8 @@ function editCamisetaTexturas(id) {
     instructions.style.display = edit ? 'block' : 'none';
     
     if (ADMIN.previewViewer) {
-      if (!edit) {
-        ADMIN.previewViewer.setEditingMode(null); // Libera rotação
-      } else {
-        ADMIN.previewViewer.setEditingMode(currentPart); // Trava rotação, libera arrastar
-      }
+      if (!edit) ADMIN.previewViewer.setEditingMode(null); 
+      else ADMIN.previewViewer.setEditingMode(currentPart); 
     }
   };
 
@@ -189,7 +257,7 @@ function editCamisetaTexturas(id) {
       scale_gola: cfg.gola.scale
     };
     const r = await window.__apiPost({ action:'updateCamiseta', senha:getSenha(), id: c.id, dados });
-    if(r.ok) { Object.assign(c, dados); window.__toast('Ajustes salvos com sucesso!'); }
+    if(r.ok) { Object.assign(c, dados); window.__toast('Ajustes de estampa salvos!'); }
   };
 
   initAdminPreview(c).then(() => {
@@ -200,7 +268,7 @@ function editCamisetaTexturas(id) {
       window.__loadTexture(c.textura_gola, c.cor_base)
     ]).then(([f, cB, m, g]) => {
       ADMIN.previewViewer.setTextures(f, cB, m, g, ADMIN.previewViewer.configs);
-      setMode(true); // Inicia no modo edição
+      setMode(true);
     });
   });
 }
