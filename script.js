@@ -112,27 +112,29 @@ function applyTshirtTexture(root, textures, configs) {
     const nome = child.name.toLowerCase();
     let tex = null, cfg = null, baseSize = 1.0;
 
+    // Identifica as partes da camisa
     if (nome.includes('body_front')) { tex = textures.frente; cfg = configs.frente; baseSize = 0.6; }
     else if (nome.includes('body_back')) { tex = textures.costas; cfg = configs.costas; baseSize = 0.6; }
     else if (nome.includes('sleeves')) { tex = textures.manga; cfg = configs.manga; baseSize = 0.2; }
     else if (nome.includes('ribbing')) { tex = textures.gola; cfg = configs.gola; baseSize = 0.15; }
-    else { return; }
+    else { return; } // Se não for camisa, ignora (evita pintar o corpo de vermelho)
 
     const mats = Array.isArray(child.material) ? child.material : [child.material];
     mats.forEach(mat => {
       mat.metalness = 0.0; 
       mat.roughness = 0.8; 
       mat.side = THREE.DoubleSide;
+      
       if (tex) {
         tex.center.set(0.5, 0.5); 
         tex.repeat.set(baseSize * (cfg.scale || 1), baseSize * (cfg.scale || 1));
         tex.offset.set(cfg.x || 0, cfg.y || 0);
         tex.flipY = false; 
         mat.map = tex; 
-        mat.color.setHex(0xffffff);
+        mat.color.setHex(0xffffff); // Garante que a textura apareça sem filtro de cor
       } else { 
         mat.map = null; 
-        mat.color.set(0xffffff); 
+        mat.color.setHex(0xffffff); 
       }
       mat.needsUpdate = true;
     });
@@ -143,20 +145,24 @@ function applyMannequinColors(root, colors) {
   root.traverse(child => {
     if (!child.isMesh) return;
     const nome = child.name.toLowerCase();
+    
+    // Ignora as partes da camisa para não pintar de vermelho
     const isShirt = nome.includes('body_front') || nome.includes('body_back') || 
                     nome.includes('sleeves') || nome.includes('ribbing');
     if (isShirt) return;
 
-    let colorHex = null;
-    if (nome.includes('hair') || nome.includes('cabelo')) colorHex = colors.cabelo;
+    // Define cor padrão segura para o corpo se não vier da API
+    let colorHex = colors.corpo || '#e0e0e0';
+    
+    if (nome.includes('hair') || nome.includes('cabelo')) colorHex = colors.cabelo || '#333333';
     else if (nome.includes('jeans') || nome.includes('pants') || nome.includes('calca') || 
-             nome.includes('leg') || nome.includes('shoe')) colorHex = colors.calca;
-    else colorHex = colors.corpo;
+             nome.includes('leg') || nome.includes('shoe')) colorHex = colors.calca || '#ffffff';
 
     if (colorHex) {
       const mats = Array.isArray(child.material) ? child.material : [child.material];
       mats.forEach(mat => { 
         if (mat.color) mat.color.set(colorHex).convertSRGBToLinear(); 
+        mat.map = null; // Remove textura vermelha se houver
         mat.needsUpdate = true; 
       });
     }
@@ -169,7 +175,7 @@ async function buildMannequin(cam) {
 
   model.traverse(child => {
     if (!child.isMesh) return;
-    child.frustumCulled = false;
+    child.frustumCulled = false; // EVITA QUE O MODELO SUMA QUANDO A CÂMERA SE MOVE
     child.material = Array.isArray(child.material) 
       ? child.material.map(m => m.clone()) 
       : child.material.clone();
@@ -180,7 +186,6 @@ async function buildMannequin(cam) {
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
   
-  // ESCALA PROFISSIONAL: altura 2.0 (equivalente a um manequim real)
   const targetHeight = 2.0;
   const scaleFactor = size.y > 0.0001 ? targetHeight / size.y : 1;
 
@@ -211,10 +216,11 @@ async function buildMannequin(cam) {
     gola: { scale: parseFloat(cam.scale_gola)||1, x: 0, y: 0 }
   };
 
+  // CORES PADRÃO DO MANEQUIM (CASO A API NÃO ENVIE)
   const mannequinColors = {
-    corpo: cam.cor_corpo || '#e0e0e0',
-    cabelo: cam.cor_cabelo || '#333333',
-    calca: cam.cor_calca || '#ffffff'
+    corpo: cam.cor_corpo || '#d4d4d4', // Cinza claro padrão
+    cabelo: cam.cor_cabelo || '#222222', // Preto suave
+    calca: cam.cor_calca || '#1a1a1a' // Cinza escuro/Preto
   };
 
   applyTshirtTexture(model, textures, configs);
@@ -230,7 +236,7 @@ async function createViewer(el, cam, options = {}) {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
-  camera.position.set(0, 1.5, 2.8);
+  camera.position.set(0, 1.5, 3.5);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
@@ -239,20 +245,19 @@ async function createViewer(el, cam, options = {}) {
   renderer.toneMappingExposure = 1.2;
   el.appendChild(renderer.domElement);
 
-  scene.add(new THREE.AmbientLight(0xffffff, 1.8));
+  scene.add(new THREE.AmbientLight(0xffffff, 2.0));
   const key = new THREE.DirectionalLight(0xffffff, 2.5); key.position.set(2, 5, 4); scene.add(key);
-  const fill = new THREE.DirectionalLight(0xffffff, 1.2); fill.position.set(-4, 3, 2); scene.add(fill);
+  const fill = new THREE.DirectionalLight(0xffffff, 1.5); fill.position.set(-4, 3, 2); scene.add(fill);
   const rim = new THREE.DirectionalLight(0xd4af37, 1.8); rim.position.set(0, 2, -5); scene.add(rim);
-  const bottom = new THREE.DirectionalLight(0xffffff, 0.5); bottom.position.set(0, -2, 2); scene.add(bottom);
 
   try {
-    const { wrapper, spinner, model, textures, configs, mannequinColors } = await buildMannequin(cam);
+    const { wrapper, model, textures, configs, mannequinColors } = await buildMannequin(cam);
     scene.add(wrapper);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-    controls.target.set(0, 1.3, 0); 
+    controls.target.set(0, 1.2, 0); 
     controls.enablePan = false;
     controls.autoRotate = options.autoRotate !== false;
     controls.autoRotateSpeed = 1.5;
@@ -285,14 +290,6 @@ async function createViewer(el, cam, options = {}) {
         textures.gola = g || textures.gola;
         Object.assign(configs, cfgs);
         applyTshirtTexture(model, textures, configs);
-      },
-      setMannequinColors(colors) { 
-        Object.assign(mannequinColors, colors); 
-        applyMannequinColors(model, mannequinColors); 
-      },
-      setEditingMode(part) { 
-        controls.enabled = !part; 
-        if (part) controls.autoRotate = false; 
       },
       destroy() { 
         cancelAnimationFrame(animId); 
@@ -332,6 +329,7 @@ async function initApp() {
       document.getElementById('desc-3').textContent = state.camisetas[2].descricao; 
     }
   } else {
+    // FALLBACK DE SEGURANÇA SE A API FALHAR
     state.camisetas = [
       { id: 1, nome: 'Classic Black', descricao: 'Algodão premium penteado 30.1. Design minimalista que combina com tudo.', cor_base: '#111111' },
       { id: 2, nome: 'Urban White', descricao: 'Modelagem oversized com toque suave. Peça-chave do guarda-roupa.', cor_base: '#f5f5f5' },
@@ -341,28 +339,28 @@ async function initApp() {
 
   const container = document.getElementById('webgl-container');
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 100);
+  const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
   
-  // CÂMERA INICIAL - posicionada para enquadrar bem o manequim
-  camera.position.set(0, 1.5, 3.2);
-  camera.lookAt(0, 1.2, 0);
+  // CÂMERA INICIAL: Mais afastada para ver o modelo inteiro
+  camera.position.set(0, 1.4, 4.5);
+  camera.lookAt(0, 1.0, 0);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.15;
+  renderer.toneMappingExposure = 1.2;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   container.appendChild(renderer.domElement);
 
-  // ============ ILUMINAÇÃO PROFISSIONAL ============
-  scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+  // ============ ILUMINAÇÃO ============
+  scene.add(new THREE.AmbientLight(0xffffff, 2.0));
   
-  const key = new THREE.DirectionalLight(0xffffff, 2.8); 
+  const key = new THREE.DirectionalLight(0xffffff, 2.5); 
   key.position.set(3, 6, 5); 
   scene.add(key);
   
-  const fill = new THREE.DirectionalLight(0xffffff, 1.3); 
+  const fill = new THREE.DirectionalLight(0xffffff, 1.5); 
   fill.position.set(-5, 3, 3); 
   scene.add(fill);
   
@@ -370,28 +368,21 @@ async function initApp() {
   rim.position.set(0, 3, -6); 
   scene.add(rim);
   
-  const bottom = new THREE.DirectionalLight(0xffffff, 0.6); 
+  const bottom = new THREE.DirectionalLight(0xffffff, 0.8); 
   bottom.position.set(0, -3, 3); 
   scene.add(bottom);
-  
-  // Luz de preenchimento lateral para as costas
-  const backFill = new THREE.DirectionalLight(0xffffff, 1.0);
-  backFill.position.set(-3, 4, -4);
-  scene.add(backFill);
 
   const group = new THREE.Group();
   scene.add(group);
   
   const totalModels = Math.min(3, state.camisetas.length);
-  
-  // ESPAÇAMENTO HORIZONTAL (para o scroll lateral funcionar bem)
-  const spacing = 6.0;
+  const spacing = 5.5; // Espaçamento ajustado
   const spinners = [];
 
   for (let i = 0; i < totalModels; i++) {
     const { wrapper, spinner } = await buildMannequin(state.camisetas[i]);
     
-    // Posicionamento: 0 = centro, 1 = direita, 2 = esquerda (para o scroll)
+    // Posicionamento: 0 = centro, 1 = direita, 2 = esquerda
     if (i === 0) wrapper.position.set(0, 0, 0); 
     if (i === 1) wrapper.position.set(spacing, 0, 0); 
     if (i === 2) wrapper.position.set(-spacing, 0, 0); 
@@ -400,7 +391,7 @@ async function initApp() {
     spinners.push(spinner);
   }
 
-  // ============ ANIMAÇÃO CONTÍNUA ============
+  // ============ ANIMAÇÃO ============
   let mouseX = 0, mouseY = 0;
   window.addEventListener('mousemove', e => {
     mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
@@ -411,14 +402,14 @@ async function initApp() {
     requestAnimationFrame(animate);
     const t = performance.now() * 0.001;
     
-    // Rotação suave de cada manequim
+    // Rotação suave
     spinners.forEach((spinner, i) => {
-      spinner.rotation.y = t * 0.35 + i * 0.5;
+      spinner.rotation.y = t * 0.3 + i * 0.5;
     });
 
-    // Parallax sutil com o mouse
-    camera.position.x += (mouseX * 0.15 - camera.position.x) * 0.05;
-    camera.position.y += ((-mouseY * 0.1) + 1.5 - camera.position.y) * 0.05;
+    // Parallax muito sutil
+    camera.position.x += (mouseX * 0.1 - camera.position.x) * 0.05;
+    camera.position.y += ((-mouseY * 0.1) + 1.4 - camera.position.y) * 0.05;
 
     renderer.render(scene, camera);
   }
@@ -434,13 +425,12 @@ async function initApp() {
     });
   });
 
-  // ============ CÂMERA QUE FOCA EM CADA MODELO ============
-  // Pontos de interesse: centro do modelo (Y=1.2 é o peito)
+  // Pontos de interesse da câmera (X=0, X=5.5, X=-5.5)
   const camPositions = {
-    s1: { pos: { x: 0, y: 1.5, z: 3.2 }, look: { x: 0, y: 1.2, z: 0 } },
-    s2: { pos: { x: 0, y: 1.45, z: 2.8 }, look: { x: 0, y: 1.2, z: 0 } },   // Centro - Modelo 1
-    s3: { pos: { x: 6, y: 1.45, z: 2.8 }, look: { x: 6, y: 1.2, z: 0 } },   // Direita - Modelo 2
-    s4: { pos: { x: -6, y: 1.45, z: 2.8 }, look: { x: -6, y: 1.2, z: 0 } }  // Esquerda - Modelo 3
+    s1: { pos: { x: 0, y: 1.4, z: 4.5 }, look: { x: 0, y: 1.0, z: 0 } },
+    s2: { pos: { x: 0, y: 1.4, z: 3.8 }, look: { x: 0, y: 1.0, z: 0 } },   // Foco Modelo 1
+    s3: { pos: { x: 5.5, y: 1.4, z: 3.8 }, look: { x: 5.5, y: 1.0, z: 0 } }, // Foco Modelo 2
+    s4: { pos: { x: -5.5, y: 1.4, z: 3.8 }, look: { x: -5.5, y: 1.0, z: 0 } } // Foco Modelo 3
   };
 
   const camState = {
@@ -448,12 +438,9 @@ async function initApp() {
     look: { ...camPositions.s1.look }
   };
 
-  // Seção 1 → Seção 2 (transição para modelo 1 no centro)
+  // Transições suaves
   ScrollTrigger.create({
-    trigger: "#s2",
-    start: "top bottom",
-    end: "top top",
-    scrub: 1.2,
+    trigger: "#s2", start: "top bottom", end: "top top", scrub: 1.2,
     onUpdate: self => {
       const p = self.progress;
       const target = camPositions.s2;
@@ -462,16 +449,11 @@ async function initApp() {
       camState.pos.z = THREE.MathUtils.lerp(camPositions.s1.pos.z, target.pos.z, p);
       camState.look.x = THREE.MathUtils.lerp(camPositions.s1.look.x, target.look.x, p);
       camState.look.y = THREE.MathUtils.lerp(camPositions.s1.look.y, target.look.y, p);
-      camState.look.z = THREE.MathUtils.lerp(camPositions.s1.look.z, target.look.z, p);
     }
   });
 
-  // Seção 2 → Seção 3 (transição para modelo 2 na direita)
   ScrollTrigger.create({
-    trigger: "#s3",
-    start: "top bottom",
-    end: "top top",
-    scrub: 1.2,
+    trigger: "#s3", start: "top bottom", end: "top top", scrub: 1.2,
     onUpdate: self => {
       const p = self.progress;
       const target = camPositions.s3;
@@ -480,16 +462,11 @@ async function initApp() {
       camState.pos.z = THREE.MathUtils.lerp(camPositions.s2.pos.z, target.pos.z, p);
       camState.look.x = THREE.MathUtils.lerp(camPositions.s2.look.x, target.look.x, p);
       camState.look.y = THREE.MathUtils.lerp(camPositions.s2.look.y, target.look.y, p);
-      camState.look.z = THREE.MathUtils.lerp(camPositions.s2.look.z, target.look.z, p);
     }
   });
 
-  // Seção 3 → Seção 4 (transição para modelo 3 na esquerda)
   ScrollTrigger.create({
-    trigger: "#s4",
-    start: "top bottom",
-    end: "top top",
-    scrub: 1.2,
+    trigger: "#s4", start: "top bottom", end: "top top", scrub: 1.2,
     onUpdate: self => {
       const p = self.progress;
       const target = camPositions.s4;
@@ -498,11 +475,9 @@ async function initApp() {
       camState.pos.z = THREE.MathUtils.lerp(camPositions.s3.pos.z, target.pos.z, p);
       camState.look.x = THREE.MathUtils.lerp(camPositions.s3.look.x, target.look.x, p);
       camState.look.y = THREE.MathUtils.lerp(camPositions.s3.look.y, target.look.y, p);
-      camState.look.z = THREE.MathUtils.lerp(camPositions.s3.look.z, target.look.z, p);
     }
   });
 
-  // Aplica as posições da câmera no loop de animação
   function updateCamera() {
     camera.position.x = camState.pos.x;
     camera.position.y = camState.pos.y;
@@ -512,7 +487,6 @@ async function initApp() {
   }
   updateCamera();
 
-  // ============ RESIZE ============
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
@@ -523,148 +497,60 @@ async function initApp() {
   initAdmin();
 }
 
-// ==========================================
-// PAINEL ADMINISTRATIVO
-// ==========================================
+// (O código do Painel Admin continua exatamente igual ao anterior)
 function initAdmin() {
   const ADMIN = { logado: false, abaAtiva: 'config', previewViewer: null };
-  
   document.getElementById('lockBtn').onclick = () => {
-    if (ADMIN.logado) { 
-      document.getElementById('adminPanel').classList.add('active'); 
-      renderAdminSidebar(); 
-      openAdminTab('config'); 
-    } 
-    else { 
-      document.getElementById('loginModal').classList.add('active'); 
-      document.getElementById('senhaInput').focus(); 
-    }
+    if (ADMIN.logado) { document.getElementById('adminPanel').classList.add('active'); renderAdminSidebar(); openAdminTab('config'); } 
+    else { document.getElementById('loginModal').classList.add('active'); document.getElementById('senhaInput').focus(); }
   };
-  
-  document.querySelectorAll('[data-close]').forEach(b => 
-    b.addEventListener('click', () => document.getElementById('loginModal').classList.remove('active'))
-  );
-  
+  document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => document.getElementById('loginModal').classList.remove('active')));
   document.getElementById('loginBtn').onclick = () => {
     if (document.getElementById('senhaInput').value.trim() === String(window.__state.config.admin_senha || '20266')) {
-      ADMIN.logado = true; 
-      document.getElementById('loginModal').classList.remove('active'); 
-      document.getElementById('adminPanel').classList.add('active');
-      renderAdminSidebar(); 
-      openAdminTab('config'); 
-      window.__toast('Bem-vindo!');
-    } else { 
-      document.getElementById('loginError').textContent = 'Senha incorreta'; 
-      setTimeout(() => document.getElementById('loginError').textContent = '', 2500); 
-    }
+      ADMIN.logado = true; document.getElementById('loginModal').classList.remove('active'); document.getElementById('adminPanel').classList.add('active');
+      renderAdminSidebar(); openAdminTab('config'); window.__toast('Bem-vindo!');
+    } else { document.getElementById('loginError').textContent = 'Senha incorreta'; setTimeout(() => document.getElementById('loginError').textContent = '', 2500); }
   };
-  
-  document.getElementById('closeAdmin').onclick = () => { 
-    document.getElementById('adminPanel').classList.remove('active'); 
-    destroyPreview(); 
-  };
-  
+  document.getElementById('closeAdmin').onclick = () => { document.getElementById('adminPanel').classList.remove('active'); destroyPreview(); };
   function getSenha() { return window.__state.config.admin_senha || '20266'; }
-  
   function renderAdminSidebar() {
-    const sidebar = document.getElementById('adminSidebar'); 
-    sidebar.innerHTML = '';
+    const sidebar = document.getElementById('adminSidebar'); sidebar.innerHTML = '';
     [{ id:'config', label:'⚙️ Textos' }, { id:'camisetas', label:'👕 Modelos' }].forEach(t => {
-      const btn = document.createElement('button'); 
-      btn.textContent = t.label; 
-      btn.dataset.tab = t.id;
-      btn.onclick = () => openAdminTab(t.id); 
-      sidebar.appendChild(btn);
+      const btn = document.createElement('button'); btn.textContent = t.label; btn.dataset.tab = t.id;
+      btn.onclick = () => openAdminTab(t.id); sidebar.appendChild(btn);
     });
   }
-  
   function openAdminTab(tabId) {
-    ADMIN.abaAtiva = tabId; 
-    document.querySelectorAll('#adminSidebar button').forEach(b => 
-      b.classList.toggle('active', b.dataset.tab === tabId)
-    );
-    const content = document.getElementById('adminContent'); 
-    content.innerHTML = ''; 
-    destroyPreview();
+    ADMIN.abaAtiva = tabId; document.querySelectorAll('#adminSidebar button').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
+    const content = document.getElementById('adminContent'); content.innerHTML = ''; destroyPreview();
     if (tabId === 'config') renderConfigTab(content);
     if (tabId === 'camisetas') renderCamisetasTab(content);
   }
-  
   function renderConfigTab(container) {
     const c = window.__state.config;
-    container.innerHTML = `
-      <h2 style="margin-bottom:24px;">Textos</h2>
-      <div class="admin-form" id="configForm">
-        <div><label>Título</label><input name="titulo_site" value="${c.titulo_site || ''}"></div>
-        <button class="btn-primary" id="saveConfigBtn">Salvar</button>
-      </div>
-    `;
+    container.innerHTML = `<h2 style="margin-bottom:24px;">Textos</h2><div class="admin-form" id="configForm"><div><label>Título</label><input name="titulo_site" value="${c.titulo_site || ''}"></div><button class="btn-primary" id="saveConfigBtn">Salvar</button></div>`;
     document.getElementById('saveConfigBtn').onclick = async () => {
-      const dados = {}; 
-      document.querySelectorAll('#configForm input').forEach(i => dados[i.name] = i.value);
+      const dados = {}; document.querySelectorAll('#configForm input').forEach(i => dados[i.name] = i.value);
       const r = await window.__apiPost({ action:'updateConfig', senha:getSenha(), dados });
       if (r.ok) { Object.assign(window.__state.config, dados); window.__toast('Salvo!'); }
     };
   }
-  
   function renderCamisetasTab(container) {
-    container.innerHTML = `
-      <h2 style="margin-bottom:24px;">Modelos</h2>
-      <div style="display:grid;gap:16px;">
-        ${window.__state.camisetas.map(c => `
-          <div style="border:1px solid var(--border);border-radius:12px;padding:20px;display:flex;gap:20px;align-items:center;">
-            <div style="flex:1;"><strong>${c.nome}</strong></div>
-            <button class="btn-ghost" data-tex="${c.id}">Configurar 3D</button>
-          </div>
-        `).join('')}
-      </div>
-    `;
-    container.querySelectorAll('[data-tex]').forEach(b => 
-      b.onclick = () => editCamisetaTexturas(parseInt(b.dataset.tex))
-    );
+    container.innerHTML = `<h2 style="margin-bottom:24px;">Modelos</h2><div style="display:grid;gap:16px;">${window.__state.camisetas.map(c => `<div style="border:1px solid var(--border);border-radius:12px;padding:20px;display:flex;gap:20px;align-items:center;"><div style="flex:1;"><strong>${c.nome}</strong></div><button class="btn-ghost" data-tex="${c.id}">Configurar 3D</button></div>`).join('')}</div>`;
+    container.querySelectorAll('[data-tex]').forEach(b => b.onclick = () => editCamisetaTexturas(parseInt(b.dataset.tex)));
   }
-  
   function editCamisetaTexturas(id) {
     const c = window.__state.camisetas.find(x => String(x.id) === String(id));
     const content = document.getElementById('adminContent');
-    content.innerHTML = `
-      <h2>Texturas: ${c.nome}</h2>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
-        <div class="admin-form">
-          <div><label>Frente</label><input type="file" data-file="frente"></div>
-          <div><label>Costas</label><input type="file" data-file="costas"></div>
-          <button class="btn-primary">Salvar</button>
-          <button class="btn-ghost" id="backTexBtn">← Voltar</button>
-        </div>
-        <div>
-          <div class="preview-3d" id="adminPreview" style="height: 500px; background: #000; border-radius:12px;"></div>
-        </div>
-      </div>
-    `;
-    document.getElementById('backTexBtn').onclick = () => { 
-      destroyPreview(); 
-      openAdminTab('camisetas'); 
-    };
-    initAdminPreview(c).then(() => { 
-      window.__loadTexture(c.textura_principal, c.cor_base).then(t => { 
-        if (ADMIN.previewViewer) ADMIN.previewViewer.setTextures(t, null, null, null, ADMIN.previewViewer.configs); 
-      }); 
-    });
+    content.innerHTML = `<h2>Texturas: ${c.nome}</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;"><div class="admin-form"><div><label>Frente</label><input type="file" data-file="frente"></div><div><label>Costas</label><input type="file" data-file="costas"></div><button class="btn-primary">Salvar</button><button class="btn-ghost" id="backTexBtn">← Voltar</button></div><div><div class="preview-3d" id="adminPreview" style="height: 500px; background: #000; border-radius:12px;"></div></div></div>`;
+    document.getElementById('backTexBtn').onclick = () => { destroyPreview(); openAdminTab('camisetas'); };
+    initAdminPreview(c).then(() => { window.__loadTexture(c.textura_principal, c.cor_base).then(t => { if (ADMIN.previewViewer) ADMIN.previewViewer.setTextures(t, null, null, null, ADMIN.previewViewer.configs); }); });
   }
-  
   async function initAdminPreview(cam) {
-    const el = document.getElementById('adminPreview'); 
-    destroyPreview(); 
-    await new Promise(r => setTimeout(r, 60));
+    const el = document.getElementById('adminPreview'); destroyPreview(); await new Promise(r => setTimeout(r, 60));
     ADMIN.previewViewer = await window.__createViewer(el, cam, { autoRotate: true });
   }
-  
-  function destroyPreview() { 
-    if (ADMIN.previewViewer) { 
-      ADMIN.previewViewer.destroy(); 
-      ADMIN.previewViewer = null; 
-    } 
-  }
+  function destroyPreview() { if (ADMIN.previewViewer) { ADMIN.previewViewer.destroy(); ADMIN.previewViewer = null; } }
 }
 
 initApp();
