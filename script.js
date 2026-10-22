@@ -66,6 +66,7 @@ function loadAvatarModel() {
   return gltfPromise;
 }
 
+// ============ APLICAR TEXTURAS E CORES ============
 function applyTshirtTexture(root, textures, configs) {
   root.traverse(child => {
     if (!child.isMesh) return;
@@ -85,7 +86,6 @@ function applyTshirtTexture(root, textures, configs) {
       mat.side = THREE.DoubleSide;
 
       if (tex) {
-        // Centraliza a textura perfeitamente antes de aplicar o zoom/posição
         tex.center.set(0.5, 0.5); 
         tex.repeat.set(cfg.scale || 1, cfg.scale || 1);
         tex.offset.set(cfg.x || 0, cfg.y || 0);
@@ -100,6 +100,35 @@ function applyTshirtTexture(root, textures, configs) {
   });
 }
 
+function applyMannequinColors(root, colors) {
+  root.traverse(child => {
+    if (!child.isMesh) return;
+    const nome = child.name.toLowerCase();
+    
+    // Identifica as partes
+    const isHair = nome.includes('hair') || nome.includes('cabelo');
+    const isPants = nome.includes('jeans') || nome.includes('pants') || nome.includes('calca');
+    
+    // O resto do corpo (que não é camisa e nem cabelo/calça) será a pele/corpo
+    const isShirt = nome.includes('body_front') || nome.includes('body_back') || nome.includes('sleeves') || nome.includes('ribbing');
+    const isBody = !isShirt && !isHair && !isPants;
+
+    let colorHex = null;
+    if (isHair) colorHex = colors.cabelo;
+    else if (isPants) colorHex = colors.calca;
+    else if (isBody) colorHex = colors.corpo;
+
+    if (colorHex) {
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach(mat => {
+        mat.color.set(colorHex);
+        mat.needsUpdate = true;
+      });
+    }
+  });
+}
+
+// ============ CRIAR VIEWER ============
 async function createViewer(el, cam, options = {}) {
   const w = el.clientWidth || 400;
   const h = el.clientHeight || 400;
@@ -156,7 +185,15 @@ async function createViewer(el, cam, options = {}) {
       gola: { scale: parseFloat(cam.scale_gola)||1, x: 0, y: 0 }
     };
 
+    // Cores do manequim
+    const mannequinColors = {
+      corpo: cam.cor_corpo || '#e0e0e0',
+      cabelo: cam.cor_cabelo || '#333333',
+      calca: cam.cor_calca || '#ffffff'
+    };
+
     applyTshirtTexture(model, textures, configs);
+    applyMannequinColors(model, mannequinColors);
     scene.add(wrapper);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -172,12 +209,11 @@ async function createViewer(el, cam, options = {}) {
     let isEditing = false;
     let currentPart = null;
     let currentTexConfig = null;
-    
     let isDragging = false;
     let prevX = 0, prevY = 0;
 
     renderer.domElement.addEventListener('pointerdown', (e) => {
-      if (isEditing && e.button === 0) { // Botão Esquerdo
+      if (isEditing && e.button === 0) {
         isDragging = true; prevX = e.clientX; prevY = e.clientY;
         controls.enabled = false;
       }
@@ -185,7 +221,6 @@ async function createViewer(el, cam, options = {}) {
 
     window.addEventListener('pointermove', (e) => {
       if (isDragging && isEditing) {
-        // Move a textura com base no movimento do mouse
         const dx = (e.clientX - prevX) * 0.005;
         const dy = (e.clientY - prevY) * 0.005;
         prevX = e.clientX; prevY = e.clientY;
@@ -205,9 +240,7 @@ async function createViewer(el, cam, options = {}) {
 
     renderer.domElement.addEventListener('wheel', (e) => {
       if (isEditing) {
-        e.preventDefault(); 
-        e.stopPropagation();
-        // Inverte o scroll para ficar intuitivo (scroll up = aumenta)
+        e.preventDefault(); e.stopPropagation();
         const factor = e.deltaY > 0 ? -0.05 : 0.05;
         currentTexConfig.scale += factor;
         currentTexConfig.scale = Math.max(0.1, Math.min(5, currentTexConfig.scale));
@@ -230,7 +263,6 @@ async function createViewer(el, cam, options = {}) {
     let pauseUntil = 0;
     const onInteract = () => { pauseUntil = performance.now() + 2500; };
     renderer.domElement.addEventListener('pointerdown', onInteract);
-    
     animate();
 
     const ro = new ResizeObserver(() => {
@@ -241,7 +273,7 @@ async function createViewer(el, cam, options = {}) {
     ro.observe(el);
 
     return {
-      scene, camera, renderer, wrapper, controls, model, textures, configs,
+      scene, camera, renderer, wrapper, controls, model, textures, configs, mannequinColors,
       setTextures(f, c, m, g, cfgs) {
         textures.frente = f || textures.frente;
         textures.costas = c || textures.costas;
@@ -250,22 +282,21 @@ async function createViewer(el, cam, options = {}) {
         Object.assign(configs, cfgs);
         applyTshirtTexture(model, textures, configs);
       },
+      setMannequinColors(colors) {
+        Object.assign(mannequinColors, colors);
+        applyMannequinColors(model, mannequinColors);
+      },
       setEditingMode(part) {
         isEditing = !!part;
         currentPart = part;
         currentTexConfig = part ? configs[part] : null;
-        // Desativa rotação enquanto edita, permite Zoom global se quiser, mas travamos o mouse para arrastar
         controls.enabled = !isEditing; 
         if (isEditing) controls.autoRotate = false;
       },
       setAutoRotate(v) { controls.autoRotate = v; if (!v) pauseUntil = Infinity; else pauseUntil = 0; },
       zoomIn() { controls.dollyIn(1.2); controls.update(); },
       zoomOut() { controls.dollyOut(1.2); controls.update(); },
-      resetCamera() {
-        camera.position.set(0, 1.2, 3.5);
-        controls.target.set(0, 1.0, 0);
-        controls.update();
-      },
+      resetCamera() { camera.position.set(0, 1.2, 3.5); controls.target.set(0, 1.0, 0); controls.update(); },
       destroy() { cancelAnimationFrame(animId); ro.disconnect(); controls.dispose(); renderer.dispose(); el.innerHTML = ''; }
     };
 
