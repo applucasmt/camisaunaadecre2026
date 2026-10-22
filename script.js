@@ -297,7 +297,7 @@ async function createViewer(el, cam, options = {}) {
 }
 window.__createViewer = createViewer;
 
-// ============ HERO VIEWER (COREOGRAFIA NATURAL CIRCULAR) ============
+// ============ HERO VIEWER (SLIDER LATERAL) ============
 async function initHeroViewer() {
   const el = document.getElementById('heroViewer');
   if (!el || state.camisetas.length === 0) return;
@@ -307,13 +307,15 @@ async function initHeroViewer() {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
-  camera.position.set(0, 1.15, 2.8); 
+  
+  // Câmera fixa olhando para o centro
+  camera.position.set(0, 1.15, 3.5); 
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.domElement.style.pointerEvents = 'none'; // BLOQUEIO TOTAL DO MOUSE
+  renderer.domElement.style.pointerEvents = 'none'; // Sem interação com o mouse
   
   el.appendChild(renderer.domElement);
 
@@ -322,35 +324,30 @@ async function initHeroViewer() {
   const fill = new THREE.DirectionalLight(0xffffff, 1.0); fill.position.set(-4, 3, 2); scene.add(fill);
   const rim = new THREE.DirectionalLight(0xd4af37, 1.5); rim.position.set(0, 2, -5); scene.add(rim);
 
-  const carouselGroup = new THREE.Group();
-  carouselGroup.position.y = -0.3; 
-  scene.add(carouselGroup);
-
-  const totalModels = Math.min(3, state.camisetas.length);
   const wrappers = [];
-  const radius = 1.8;
+  const totalModels = Math.min(3, state.camisetas.length);
+  
+  // Distância entre cada manequim
+  const spacing = 2.2; 
 
   for (let i = 0; i < totalModels; i++) {
     const { wrapper } = await buildMannequin(state.camisetas[i]);
-    const angle = (i / totalModels) * Math.PI * 2;
     
-    // Posiciona no círculo
-    wrapper.position.set(Math.sin(angle) * radius, 0, Math.cos(angle) * radius);
+    // Posiciona lado a lado (Esquerda, Centro, Direita)
+    wrapper.position.x = (i - 1) * spacing; 
+    wrapper.position.y = -0.3;
     
-    // CORREÇÃO: Removemos a compensação de rotação. 
-    // Assim eles mantêm sua orientação natural. O que está na frente olha para você.
-    // O que está atrás de você, olha para as suas costas. E o da lateral, fica de lado.
-
-    carouselGroup.add(wrapper);
+    scene.add(wrapper);
     wrappers.push(wrapper);
   }
 
   let currentIndex = 0;
+  // Fases: 'turning_back' -> 'pausing_back' -> 'turning_front' -> 'pausing_front' -> 'sliding'
   let statePhase = 'turning_back'; 
   let phaseTimer = 0;
   
-  let currentCarouselAngle = 0;
-  let targetCarouselAngle = 0;
+  let currentCameraX = 0;
+  let targetCameraX = 0;
   let extraSpinAngle = 0; 
 
   const clock = new THREE.Clock();
@@ -360,7 +357,6 @@ async function initHeroViewer() {
     const delta = clock.getDelta();
     phaseTimer += delta;
 
-    // CONTROLE DE TEMPO E ANIMAÇÕES (FASES)
     if (statePhase === 'turning_back') {
       extraSpinAngle = Math.min(Math.PI, extraSpinAngle + delta * 2.5); 
       if (extraSpinAngle >= Math.PI) { statePhase = 'pausing_back'; phaseTimer = 0; }
@@ -374,16 +370,29 @@ async function initHeroViewer() {
     }
     else if (statePhase === 'pausing_front') {
       if (phaseTimer > 1.0) { 
-        statePhase = 'moving_carousel';
-        targetCarouselAngle = -((currentIndex + 1) / totalModels) * Math.PI * 2;
+        statePhase = 'sliding';
+        
+        // Calcula a próxima posição da câmera
+        const nextIndex = (currentIndex + 1) % totalModels;
+        
+        // Truque do Slider: Se o próximo for o 0, ele está lá na esquerda.
+        // Para não voltar tudo de uma vez, a gente teletransporta a câmera para o final e desliza para o 0.
+        if (nextIndex === 0) {
+           // Quando volta pro começo, reseta os modelos para as posições iniciais instantaneamente
+           wrappers.forEach((w, i) => { w.position.x = (i - 1) * spacing; });
+           currentCameraX = (totalModels - 1) * spacing; // Coloca câmera no final
+           targetCameraX = 0; // Desliza de volta pro centro
+        } else {
+           targetCameraX = (nextIndex - 1) * spacing;
+        }
       }
     }
-    else if (statePhase === 'moving_carousel') {
+    else if (statePhase === 'sliding') {
       const smoothFactor = 1 - Math.exp(-3.0 * delta); 
-      currentCarouselAngle += (targetCarouselAngle - currentCarouselAngle) * smoothFactor;
+      currentCameraX += (targetCameraX - currentCameraX) * smoothFactor;
       
-      if (Math.abs(targetCarouselAngle - currentCarouselAngle) < 0.01) {
-        currentCarouselAngle = targetCarouselAngle;
+      if (Math.abs(targetCameraX - currentCameraX) < 0.01) {
+        currentCameraX = targetCameraX;
         currentIndex = (currentIndex + 1) % totalModels;
         statePhase = 'turning_back';
         phaseTimer = 0;
@@ -391,17 +400,16 @@ async function initHeroViewer() {
       }
     }
 
-    // APLICA A ROTAÇÃO NO CARROSSEL
-    carouselGroup.rotation.y = currentCarouselAngle;
+    // Move a câmera e o alvo dela
+    camera.position.x = currentCameraX;
+    camera.lookAt(currentCameraX, 1.15, 0);
     
-    // APLICA O GIRO INDIVIDUAL
+    // Aplica o giro individual no modelo ativo
     wrappers.forEach((w, i) => {
       if (i === currentIndex) {
-        // O manequim da frente tem a rotação base 0 + o giro individual
         w.rotation.y = extraSpinAngle;
       } else {
-        // Os outros ficam com rotação base 0 (mantendo sua posição natural no círculo)
-        w.rotation.y = 0;
+        w.rotation.y = 0; // Os outros sempre de frente
       }
     });
 
