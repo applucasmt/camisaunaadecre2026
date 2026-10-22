@@ -186,15 +186,13 @@ function editCamisetaInfo(id) {
 function renderTexturasTab(container) {
   container.innerHTML = `
     <h2 style="margin-bottom:24px;">🎨 Texturas por Modelo</h2>
-    <p style="color:var(--text-dim);margin-bottom:24px;">Escolha um modelo para editar texturas com preview 3D ao vivo.</p>
+    <p style="color:var(--text-dim);margin-bottom:24px;">Escolha um modelo para subir a textura PNG/JPG.</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;">
       ${window.__state.camisetas.map(c => `
         <div style="border:1px solid var(--border);border-radius:12px;padding:20px;cursor:pointer;" data-t="${c.id}">
           <strong>${c.nome}</strong>
           <div style="margin-top:12px;display:grid;gap:6px;font-size:.8rem;color:var(--text-dim);">
-            <span>${c.textura_principal ? '✅' : '⬜'} Principal</span>
-            <span>${c.textura_secundaria ? '✅' : '⬜'} Secundária</span>
-            <span>${c.textura_manga ? '✅' : '⬜'} Mangas</span>
+            <span>${c.textura_principal ? '✅ Textura aplicada' : '⬜ Sem textura'}</span>
           </div>
         </div>
       `).join('')}
@@ -210,13 +208,19 @@ function editCamisetaTexturas(id) {
   if (!c) return;
   const content = document.getElementById('adminContent');
   content.innerHTML = `
-    <h2 style="margin-bottom:16px;">Texturas: ${c.nome}</h2>
-    <p style="color:var(--text-dim);margin-bottom:24px;">Faça upload de PNG/JPG. Preview 3D interativo ao lado.</p>
+    <h2 style="margin-bottom:16px;">Textura: ${c.nome}</h2>
+    <p style="color:var(--text-dim);margin-bottom:24px;">Substitua a imagem. O preview 3D ao lado atualiza na hora.</p>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
       <div class="admin-form">
-        ${renderUploadZone('principal', 'Textura Principal', c.textura_principal)}
-        ${renderUploadZone('secundaria', 'Textura Secundária', c.textura_secundaria)}
-        ${renderUploadZone('manga', 'Textura das Mangas', c.textura_manga)}
+        <div>
+          <label>Textura Principal (PNG/JPG)</label>
+          <div class="upload-zone" data-upload="principal">
+            <input type="file" accept="image/*" data-file="principal">
+            <p>📤 Clique para enviar a nova estampa</p>
+            ${c.textura_principal ? `<img src="${c.textura_principal}" class="preview-thumb" crossorigin="anonymous">` : ''}
+            <p class="upload-status" data-status="principal" style="color:var(--secondary);font-size:.8rem;margin-top:8px;"></p>
+          </div>
+        </div>
         <button class="btn-ghost" id="backTexBtn">← Voltar</button>
       </div>
       <div>
@@ -224,32 +228,20 @@ function editCamisetaTexturas(id) {
       </div>
     </div>
   `;
+  
   document.getElementById('backTexBtn').onclick = () => {
     destroyPreview();
     openAdminTab('texturas');
   };
-  ['principal','secundaria','manga'].forEach(tipo => setupUpload(tipo, c));
+  
+  setupUpload(c);
   initAdminPreview(c);
 }
 
-function renderUploadZone(tipo, label, urlAtual) {
-  return `
-    <div>
-      <label>${label}</label>
-      <div class="upload-zone" data-upload="${tipo}">
-        <input type="file" accept="image/*" data-file="${tipo}">
-        <p>📤 Clique para enviar</p>
-        ${urlAtual ? `<img src="${urlAtual}" class="preview-thumb" crossorigin="anonymous">` : ''}
-        <p class="upload-status" data-status="${tipo}" style="color:var(--secondary);font-size:.8rem;margin-top:8px;"></p>
-      </div>
-    </div>
-  `;
-}
-
-function setupUpload(tipo, cam) {
-  const zone = document.querySelector(`[data-upload="${tipo}"]`);
-  const input = document.querySelector(`[data-file="${tipo}"]`);
-  const status = document.querySelector(`[data-status="${tipo}"]`);
+function setupUpload(cam) {
+  const zone = document.querySelector(`[data-upload="principal"]`);
+  const input = document.querySelector(`[data-file="principal"]`);
+  const status = document.querySelector(`[data-status="principal"]`);
   if (!zone) return;
 
   zone.onclick = () => input.click();
@@ -257,30 +249,34 @@ function setupUpload(tipo, cam) {
   input.onchange = async () => {
     const file = input.files[0];
     if (!file) return;
-    status.textContent = 'Enviando...';
+    status.textContent = 'Enviando para o Drive...';
 
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const dataUrl = ev.target.result;
-      updatePreviewTexture(tipo, dataUrl);
+      updatePreviewTexture(dataUrl); // Preview imediato local
 
       const base64 = dataUrl.split(',')[1];
       try {
         const r = await window.__apiPost({
           action:'uploadImagem', senha:getSenha(),
-          camiseta_id: cam.id, tipo, base64,
+          camiseta_id: cam.id, tipo: 'principal', base64,
           filename: file.name, mimeType: file.type
         });
         if (r.ok) {
-          const campo = tipo === 'principal' ? 'textura_principal' :
-                        tipo === 'secundaria' ? 'textura_secundaria' : 'textura_manga';
-          cam[campo] = r.url;
-          status.textContent = '✓ Enviada!';
-          window.__toast('Textura enviada!');
-          // aplica também nos viewers do site principal
-          if (window.__state.productViewers[cam.id] && tipo === 'principal') {
+          cam.textura_principal = r.url;
+          status.textContent = '✓ Enviada com sucesso!';
+          window.__toast('Textura salva na planilha!');
+          
+          // Atualiza instantaneamente os modelos na página principal
+          if (window.__state.productViewers[cam.id]) {
             window.__loadTexture(r.url).then(tex => {
               window.__state.productViewers[cam.id].setTexture(tex);
+            });
+          }
+          if (window.__state.heroViewer && String(window.__state.camisetas[0].id) === String(cam.id)) {
+            window.__loadTexture(r.url).then(tex => {
+              window.__state.heroViewer.setTexture(tex);
             });
           }
         } else {
@@ -301,26 +297,17 @@ async function initAdminPreview(cam) {
     ADMIN.previewViewer = await window.__createViewer(el, cam, { autoRotate: true });
   } catch (e) {
     console.error(e);
-    el.innerHTML = '<p style="padding:20px;color:#ff4d4d;font-size:.85rem;">Falha ao carregar avatar 3D</p>';
+    el.innerHTML = '<p style="padding:20px;color:#ff4d4d;font-size:.85rem;">Falha ao carregar 3D</p>';
   }
 }
 
-function updatePreviewTexture(tipo, dataUrl) {
+function updatePreviewTexture(dataUrl) {
   if (!ADMIN.previewViewer) return;
   const loader = new THREE.TextureLoader();
   loader.load(dataUrl, (tex) => {
     tex.anisotropy = 8;
     tex.colorSpace = THREE.SRGBColorSpace;
-    if (tipo === 'principal') {
-      ADMIN.previewViewer.setTexture(tex);
-    }
-    // secundária e manga: aplica como cor de fundo do material como demo
-    if (tipo === 'secundaria' || tipo === 'manga') {
-      // para simplificar, aplica mesma textura em meshes específicas se existirem
-      ADMIN.previewViewer.tshirtMeshes.forEach(mesh => {
-        // já tratado por setTexture apenas principal
-      });
-    }
+    ADMIN.previewViewer.setTexture(tex);
   });
 }
 
