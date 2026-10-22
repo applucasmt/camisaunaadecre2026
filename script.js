@@ -242,12 +242,11 @@ async function createViewer(el, cam, options = {}) {
 window.__createViewer = createViewer;
 
 // ==========================================
-// CORE: SCROLLTELLING APPLE (CÂMERA FIXA E GIRO NO ALVO)
+// CORE: SCROLLTELLING APPLE (CLOSE-UP NA CAMISA)
 // ==========================================
 async function initApp() {
   gsap.registerPlugin(ScrollTrigger);
   
-  // 1. Carrega API
   const data = await apiGet('getAll');
   if (data.ok) {
     state.config = Object.fromEntries(data.config.map(c => [c.CHAVE, c.VALOR]));
@@ -263,14 +262,12 @@ async function initApp() {
     ];
   }
 
-  // 2. Configura Three.js Base
   const container = document.getElementById('webgl-container');
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
   
-  // Câmera começa no centro, bem longe e alta
-  camera.position.set(0, 2.5, 7.0); 
-  camera.lookAt(0, 1.5, 0);
+  // Câmera posicionada para o Close-up da camisa (Z = 2.2)
+  camera.position.set(0, 2.0, 2.2); 
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -278,18 +275,16 @@ async function initApp() {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   container.appendChild(renderer.domElement);
 
-  // Luzes
   scene.add(new THREE.AmbientLight(0xffffff, 1.5));
   const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(2, 5, 4); scene.add(key);
   const fill = new THREE.DirectionalLight(0xffffff, 1.0); fill.position.set(-4, 3, 2); scene.add(fill);
   const rim = new THREE.DirectionalLight(0xd4af37, 1.5); rim.position.set(0, 2, -5); scene.add(rim);
 
-  // 3. CARREGA OS 3 MANEQUINS NAS EXTREMIDADES
   const group = new THREE.Group();
   scene.add(group);
   
   const totalModels = Math.min(3, state.camisetas.length);
-  // POSICIONAMENTO LATERAL: Esquerda (-4), Centro (0), Direita (4)
+  // Distância lateral entre os manequins
   const spacing = 4.5; 
 
   for (let i = 0; i < totalModels; i++) {
@@ -302,13 +297,12 @@ async function initApp() {
     group.add(wrapper);
   }
 
-  // 4. Rotação Contínua dos manequins no próprio eixo
   function animate() {
     requestAnimationFrame(animate);
     const t = performance.now() * 0.001;
     
     group.children.forEach(child => {
-      child.rotation.y = t * 0.5; // Gira em torno do eixo Y
+      child.rotation.y = t * 0.5;
     });
 
     renderer.render(scene, camera);
@@ -316,7 +310,7 @@ async function initApp() {
   animate();
 
   // ==========================================
-  // 5. SCROLLTELLING (CÂMERA FIXA, APENAS OLHAR PARA OS LADOS)
+  // SCROLLTELLING
   // ==========================================
   gsap.utils.toArray('.content-box').forEach(box => {
     ScrollTrigger.create({
@@ -327,8 +321,9 @@ async function initApp() {
     });
   });
 
-  // Variáveis para suavizar o olhar (LookAt)
-  const lookAtTarget = { x: 0, y: 1.6, z: 0 };
+  // Foco da câmera (LookAt Target)
+  // O Y=1.8 foca no peito, o que preenche a tela com a camisa!
+  const lookAtTarget = { x: 0, y: 1.8, z: 0 };
 
   const tl = gsap.timeline({
     scrollTrigger: {
@@ -339,17 +334,16 @@ async function initApp() {
     }
   });
 
-  // Seção 1 (Intro) -> Seção 2 (Foco no Centro)
-  tl.to(camera.position, { z: 3.5, y: 2.0, scrollTrigger: { trigger: "#s2", start: "top bottom", end: "top top", scrub: 1 } })
+  // Seção 1 -> Seção 2 (Foco no Centro)
+  tl.to(camera.position, { z: 2.2, y: 2.0, scrollTrigger: { trigger: "#s2", start: "top bottom", end: "top top", scrub: 1 } })
     .to(lookAtTarget, { x: 0, y: 1.8, z: 0, onUpdate: () => camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z), scrollTrigger: { trigger: "#s2", start: "top bottom", end: "top top", scrub: 1 } }, "<");
 
-  // Seção 2 -> Seção 3 (Olha para a Direita)
+  // Seção 2 -> Seção 3 (Vira para a Direita)
   tl.to(lookAtTarget, { x: spacing, y: 1.8, z: 0, onUpdate: () => camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z), scrollTrigger: { trigger: "#s3", start: "top bottom", end: "top top", scrub: 1 } });
 
-  // Seção 3 -> Seção 4 (Olha para a Esquerda)
+  // Seção 3 -> Seção 4 (Vira para a Esquerda)
   tl.to(lookAtTarget, { x: -spacing, y: 1.8, z: 0, onUpdate: () => camera.lookAt(lookAtTarget.x, lookAtTarget.y, lookAtTarget.z), scrollTrigger: { trigger: "#s4", start: "top bottom", end: "top top", scrub: 1 } });
 
-  // Resize
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
@@ -361,7 +355,7 @@ async function initApp() {
 }
 
 // ==========================================
-// PAINEL ADMINISTRATIVO (MANTIDO)
+// PAINEL ADMINISTRATIVO
 // ==========================================
 function initAdmin() {
   const ADMIN = { logado: false, abaAtiva: 'config', previewViewer: null };
