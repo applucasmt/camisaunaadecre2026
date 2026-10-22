@@ -10,12 +10,17 @@ const $ = (s, r = document) => r.querySelector(s);
 window.__state = state;
 window.THREE = THREE;
 
+// SISTEMA DE NOTIFICAÇÃO (TOAST)
 function toast(msg, isError = false) {
   let el = $('#toast');
   if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; document.body.appendChild(el); }
-  el.textContent = msg; el.classList.toggle('error', isError); el.classList.add('show');
-  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 3000);
+  el.textContent = msg; 
+  el.classList.toggle('error', isError); 
+  el.classList.add('show');
+  clearTimeout(el._t); 
+  el._t = setTimeout(() => el.classList.remove('show'), 3000);
 }
+window.__toast = toast;
 
 async function apiGet(action = 'getAll') {
   try { const r = await fetch(`${API_URL}?action=${action}`); return await r.json(); } catch (e) { return { ok: false }; }
@@ -66,7 +71,6 @@ function loadAvatarModel() {
   return gltfPromise;
 }
 
-// ============ APLICAR TEXTURAS (CENTRALIZADO E COM TAMANHOS BASE) ============
 function applyTshirtTexture(root, textures, configs) {
   root.traverse(child => {
     if (!child.isMesh) return;
@@ -75,40 +79,23 @@ function applyTshirtTexture(root, textures, configs) {
     let tex = null, cfg = null;
     let baseSize = 1.0;
 
-    if (nome.includes('body_front')) { 
-      tex = textures.frente; cfg = configs.frente; baseSize = 0.6; // Tamanho padrão para frente
-    } else if (nome.includes('body_back')) { 
-      tex = textures.costas; cfg = configs.costas; baseSize = 0.6; // Tamanho padrão para costas
-    } else if (nome.includes('sleeves')) { 
-      tex = textures.manga; cfg = configs.manga; baseSize = 0.2; // Mangas são menores
-    } else if (nome.includes('ribbing')) { 
-      tex = textures.gola; cfg = configs.gola; baseSize = 0.15; // Gola é bem pequena
-    } else { return; }
+    if (nome.includes('body_front')) { tex = textures.frente; cfg = configs.frente; baseSize = 0.6; }
+    else if (nome.includes('body_back')) { tex = textures.costas; cfg = configs.costas; baseSize = 0.6; }
+    else if (nome.includes('sleeves')) { tex = textures.manga; cfg = configs.manga; baseSize = 0.2; }
+    else if (nome.includes('ribbing')) { tex = textures.gola; cfg = configs.gola; baseSize = 0.15; }
+    else { return; }
 
     const mats = Array.isArray(child.material) ? child.material : [child.material];
     mats.forEach(mat => {
-      mat.metalness = 0.0;
-      mat.roughness = 0.8;
-      mat.side = THREE.DoubleSide;
-
+      mat.metalness = 0.0; mat.roughness = 0.8; mat.side = THREE.DoubleSide;
       if (tex) {
-        // Centralização perfeita nativa do Three.js
         tex.center.set(0.5, 0.5); 
-        
-        // Aplica o tamanho base junto com o zoom do scroll
         tex.repeat.set(baseSize * (cfg.scale || 1), baseSize * (cfg.scale || 1));
-        
-        // Aplica a posição (X e Y) ajustada pelo mouse
         tex.offset.set(cfg.x || 0, cfg.y || 0);
-        
-        // O flipY precisa ser ajustado para o padrão ao usar offset
         tex.flipY = false; 
-
-        mat.map = tex;
-        mat.color.setHex(0xffffff);
+        mat.map = tex; mat.color.setHex(0xffffff);
       } else {
-        mat.map = null;
-        mat.color.set(0xffffff);
+        mat.map = null; mat.color.set(0xffffff);
       }
       mat.needsUpdate = true;
     });
@@ -119,25 +106,17 @@ function applyMannequinColors(root, colors) {
   root.traverse(child => {
     if (!child.isMesh) return;
     const nome = child.name.toLowerCase();
-    
     const isShirt = nome.includes('body_front') || nome.includes('body_back') || nome.includes('sleeves') || nome.includes('ribbing');
     if (isShirt) return;
 
     let colorHex = null;
-    if (nome.includes('hair') || nome.includes('cabelo')) {
-      colorHex = colors.cabelo;
-    } else if (nome.includes('jeans') || nome.includes('pants') || nome.includes('calca') || nome.includes('leg') || nome.includes('shoe')) {
-      colorHex = colors.calca;
-    } else {
-      colorHex = colors.corpo;
-    }
+    if (nome.includes('hair') || nome.includes('cabelo')) colorHex = colors.cabelo;
+    else if (nome.includes('jeans') || nome.includes('pants') || nome.includes('calca') || nome.includes('leg') || nome.includes('shoe')) colorHex = colors.calca;
+    else colorHex = colors.corpo;
 
     if (colorHex) {
       const mats = Array.isArray(child.material) ? child.material : [child.material];
-      mats.forEach(mat => {
-        mat.color.set(colorHex);
-        mat.needsUpdate = true;
-      });
+      mats.forEach(mat => { mat.color.set(colorHex); mat.needsUpdate = true; });
     }
   });
 }
@@ -147,9 +126,11 @@ async function createViewer(el, cam, options = {}) {
   const h = el.clientHeight || 400;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x151515);
+  // REMOVIDO O FUNDO ESCURO PARA FICAR TRANSPARENTE E MISTURAR COM O SITE
   const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 1000);
-  camera.position.set(0, 1.2, 3.5);
+  
+  // CÂMERA MAIS PRÓXIMA (FOCO NO BUSTO/CAMISA)
+  camera.position.set(0, 1.2, 2.2);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
@@ -211,7 +192,10 @@ async function createViewer(el, cam, options = {}) {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-    controls.target.set(0, 1.0, 0);
+    
+    // ALVO DO FOCO: Altura do peito para cima
+    controls.target.set(0, 1.3, 0);
+    
     controls.minDistance = 0.1;
     controls.maxDistance = Infinity;
     controls.enablePan = false;
@@ -236,10 +220,7 @@ async function createViewer(el, cam, options = {}) {
         const dx = (e.clientX - prevX) * 0.005;
         const dy = (e.clientY - prevY) * 0.005;
         prevX = e.clientX; prevY = e.clientY;
-        
-        currentTexConfig.x -= dx; 
-        currentTexConfig.y += dy;
-        
+        currentTexConfig.x -= dx; currentTexConfig.y += dy;
         applyTshirtTexture(model, textures, configs);
       }
     });
@@ -297,8 +278,7 @@ async function createViewer(el, cam, options = {}) {
         applyMannequinColors(model, mannequinColors);
       },
       setEditingMode(part) {
-        isEditing = !!part;
-        currentPart = part;
+        isEditing = !!part; currentPart = part;
         currentTexConfig = part ? configs[part] : null;
         controls.enabled = !isEditing; 
         if (isEditing) controls.autoRotate = false;
@@ -306,7 +286,7 @@ async function createViewer(el, cam, options = {}) {
       setAutoRotate(v) { controls.autoRotate = v; if (!v) pauseUntil = Infinity; else pauseUntil = 0; },
       zoomIn() { controls.dollyIn(1.2); controls.update(); },
       zoomOut() { controls.dollyOut(1.2); controls.update(); },
-      resetCamera() { camera.position.set(0, 1.2, 3.5); controls.target.set(0, 1.0, 0); controls.update(); },
+      resetCamera() { camera.position.set(0, 1.2, 2.2); controls.target.set(0, 1.3, 0); controls.update(); },
       destroy() { cancelAnimationFrame(animId); ro.disconnect(); controls.dispose(); renderer.dispose(); el.innerHTML = ''; }
     };
 
