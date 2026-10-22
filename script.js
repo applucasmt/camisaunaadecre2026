@@ -101,7 +101,6 @@ function applyTshirtTexture(root, textures, configs) {
   });
 }
 
-// ============ FUNÇÃO DE CORES AJUSTADA (sRGB) ============
 function applyMannequinColors(root, colors) {
   root.traverse(child => {
     if (!child.isMesh) return;
@@ -117,23 +116,69 @@ function applyMannequinColors(root, colors) {
     if (colorHex) {
       const mats = Array.isArray(child.material) ? child.material : [child.material];
       mats.forEach(mat => {
-        // A MÁGICA ACONTECE AQUI: Converte a cor sRGB do HTML para Linear do Three.js
-        if (mat.color) {
-          mat.color.set(colorHex).convertSRGBToLinear(); 
-        }
+        if (mat.color) mat.color.set(colorHex).convertSRGBToLinear(); 
         mat.needsUpdate = true;
       });
     }
   });
 }
 
+// ============ CRIA O MODELO INDIVIDUAL ============
+async function buildMannequin(cam) {
+  const originalModel = await loadAvatarModel();
+  const model = cloneSkinned(originalModel);
+
+  model.traverse(child => {
+    if (!child.isMesh) return;
+    child.frustumCulled = false;
+    child.material = Array.isArray(child.material) ? child.material.map(m => m.clone()) : child.material.clone();
+  });
+  model.updateMatrixWorld(true);
+
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const targetHeight = 2.0;
+  const scaleFactor = size.y > 0.0001 ? targetHeight / size.y : 1;
+
+  const wrapper = new THREE.Group();
+  wrapper.add(model);
+  wrapper.scale.setScalar(scaleFactor);
+  wrapper.position.set(-center.x * scaleFactor, -box.min.y * scaleFactor, -center.z * scaleFactor);
+
+  const textures = {
+    frente: await loadTexture(cam.textura_principal, cam.cor_base),
+    costas: await loadTexture(cam.textura_costas, cam.cor_base),
+    manga: await loadTexture(cam.textura_manga, cam.cor_base),
+    gola: await loadTexture(cam.textura_gola, cam.cor_base)
+  };
+  
+  const configs = {
+    frente: { scale: parseFloat(cam.scale_frente)||1, x: parseFloat(cam.x_frente)||0, y: parseFloat(cam.y_frente)||0 },
+    costas: { scale: parseFloat(cam.scale_costas)||1, x: parseFloat(cam.x_costas)||0, y: parseFloat(cam.y_costas)||0 },
+    manga: { scale: parseFloat(cam.scale_manga)||1, x: parseFloat(cam.x_manga)||0, y: parseFloat(cam.y_manga)||0 },
+    gola: { scale: parseFloat(cam.scale_gola)||1, x: 0, y: 0 }
+  };
+
+  const mannequinColors = {
+    corpo: cam.cor_corpo || '#e0e0e0',
+    cabelo: cam.cor_cabelo || '#333333',
+    calca: cam.cor_calca || '#ffffff'
+  };
+
+  applyTshirtTexture(model, textures, configs);
+  applyMannequinColors(model, mannequinColors);
+  
+  return { wrapper, model, textures, configs, mannequinColors };
+}
+
+// ============ VIEWER DOS PRODUTOS (CARDS INDIVIDUAIS) ============
 async function createViewer(el, cam, options = {}) {
   const w = el.clientWidth || 400;
   const h = el.clientHeight || 400;
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 1000);
-  
   camera.position.set(0, 1.2, 2.2);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -148,49 +193,7 @@ async function createViewer(el, cam, options = {}) {
   const rim = new THREE.DirectionalLight(0xd4af37, 1.5); rim.position.set(0, 2, -5); scene.add(rim);
 
   try {
-    const originalModel = await loadAvatarModel();
-    const model = cloneSkinned(originalModel);
-
-    model.traverse(child => {
-      if (!child.isMesh) return;
-      child.frustumCulled = false;
-      child.material = Array.isArray(child.material) ? child.material.map(m => m.clone()) : child.material.clone();
-    });
-    model.updateMatrixWorld(true);
-
-    const box = new THREE.Box3().setFromObject(model);
-    const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
-    const targetHeight = 2.0;
-    const scaleFactor = size.y > 0.0001 ? targetHeight / size.y : 1;
-
-    const wrapper = new THREE.Group();
-    wrapper.add(model);
-    wrapper.scale.setScalar(scaleFactor);
-    wrapper.position.set(-center.x * scaleFactor, -box.min.y * scaleFactor, -center.z * scaleFactor);
-
-    const textures = {
-      frente: await loadTexture(cam.textura_principal, cam.cor_base),
-      costas: await loadTexture(cam.textura_costas, cam.cor_base),
-      manga: await loadTexture(cam.textura_manga, cam.cor_base),
-      gola: await loadTexture(cam.textura_gola, cam.cor_base)
-    };
-    
-    const configs = {
-      frente: { scale: parseFloat(cam.scale_frente)||1, x: parseFloat(cam.x_frente)||0, y: parseFloat(cam.y_frente)||0 },
-      costas: { scale: parseFloat(cam.scale_costas)||1, x: parseFloat(cam.x_costas)||0, y: parseFloat(cam.y_costas)||0 },
-      manga: { scale: parseFloat(cam.scale_manga)||1, x: parseFloat(cam.x_manga)||0, y: parseFloat(cam.y_manga)||0 },
-      gola: { scale: parseFloat(cam.scale_gola)||1, x: 0, y: 0 }
-    };
-
-    const mannequinColors = {
-      corpo: cam.cor_corpo || '#e0e0e0',
-      cabelo: cam.cor_cabelo || '#333333',
-      calca: cam.cor_calca || '#ffffff'
-    };
-
-    applyTshirtTexture(model, textures, configs);
-    applyMannequinColors(model, mannequinColors);
+    const { wrapper, model, textures, configs, mannequinColors } = await buildMannequin(cam);
     scene.add(wrapper);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -243,11 +246,8 @@ async function createViewer(el, cam, options = {}) {
     let animId;
     function animate() {
       animId = requestAnimationFrame(animate);
-      if (!isEditing) {
-        controls.autoRotate = (performance.now() > pauseUntil) && (options.autoRotate !== false);
-      } else {
-        controls.autoRotate = false;
-      }
+      if (!isEditing) controls.autoRotate = (performance.now() > pauseUntil) && (options.autoRotate !== false);
+      else controls.autoRotate = false;
       controls.update();
       renderer.render(scene, camera);
     }
@@ -299,6 +299,80 @@ async function createViewer(el, cam, options = {}) {
 }
 window.__createViewer = createViewer;
 
+// ============ HERO VIEWER (3 MODELOS JUNTOS) ============
+async function initHeroViewer() {
+  const el = document.getElementById('heroViewer');
+  if (!el || state.camisetas.length === 0) return;
+  
+  const w = el.clientWidth || 800;
+  const h = el.clientHeight || 600;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
+  
+  // Câmera ajustada para pegar os 3 modelos lado a lado
+  camera.position.set(0, 1.5, 5.5);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(w, h);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  el.appendChild(renderer.domElement);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+  const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(2, 5, 4); scene.add(key);
+  const fill = new THREE.DirectionalLight(0xffffff, 1.0); fill.position.set(-4, 3, 2); scene.add(fill);
+  const rim = new THREE.DirectionalLight(0xd4af37, 1.5); rim.position.set(0, 2, -5); scene.add(rim);
+
+  // Carrega os 3 modelos
+  const wrappers = [];
+  for (let i = 0; i < Math.min(3, state.camisetas.length); i++) {
+    const { wrapper } = await buildMannequin(state.camisetas[i]);
+    
+    // POSICIONAMENTO DO TRIO (Um mais na frente, outro mais atrás)
+    // Modelo 1 (Esquerda, um pouco atrás)
+    if (i === 0) {
+      wrapper.position.set(-1.3, 0, -0.6); 
+      wrapper.rotation.y = 0.3;
+    } 
+    // Modelo 2 (Centro, mais para frente)
+    else if (i === 1) {
+      wrapper.position.set(0, 0, 0.4); 
+      wrapper.rotation.y = 0;
+    } 
+    // Modelo 3 (Direita, um pouco atrás)
+    else {
+      wrapper.position.set(1.3, 0, -0.6); 
+      wrapper.rotation.y = -0.3;
+    }
+
+    scene.add(wrapper);
+    wrappers.push(wrapper);
+  }
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.target.set(0, 1.0, 0);
+  controls.enablePan = false;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.8; // Mais devagar para não enjoar
+
+  function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  const ro = new ResizeObserver(() => {
+    const w2 = el.clientWidth, h2 = el.clientHeight;
+    if (!w2 || !h2) return;
+    camera.aspect = w2 / h2; camera.updateProjectionMatrix(); renderer.setSize(w2, h2);
+  });
+  ro.observe(el);
+}
+
 async function loadSite() {
   try {
     const data = await apiGet('getAll');
@@ -322,10 +396,11 @@ async function loadSite() {
 async function renderProducts() {
   const grid = $('#productsGrid');
   grid.innerHTML = '';
-  if (state.camisetas.length > 0) {
-    const el = document.getElementById('heroViewer');
-    if (el) state.heroViewer = await createViewer(el, state.camisetas[0], { autoRotate: true });
-  }
+  
+  // Inicializa o Hero com o trio
+  await initHeroViewer();
+
+  // Cria os cards individuais
   state.camisetas.forEach((cam, idx) => {
     const card = document.createElement('div');
     card.className = 'product-card';
