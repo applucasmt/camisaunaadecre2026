@@ -297,7 +297,7 @@ async function createViewer(el, cam, options = {}) {
 }
 window.__createViewer = createViewer;
 
-// ============ HERO VIEWER (CARROSSEL SUAVE E BAIXO) ============
+// ============ HERO VIEWER (CARROSSEL SUAVE E SEMPRE DE FRENTE) ============
 async function initHeroViewer() {
   const el = document.getElementById('heroViewer');
   if (!el || state.camisetas.length === 0) return;
@@ -308,7 +308,6 @@ async function initHeroViewer() {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
   
-  // CÂMERA MAIS BAIXA (Foco no peito)
   camera.position.set(0, 1.15, 2.8); 
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -323,7 +322,6 @@ async function initHeroViewer() {
   const rim = new THREE.DirectionalLight(0xd4af37, 1.5); rim.position.set(0, 2, -5); scene.add(rim);
 
   const carouselGroup = new THREE.Group();
-  // ABAIXA OS MANEQUINS (Tira aquele efeito de "flutuando")
   carouselGroup.position.y = -0.3; 
   scene.add(carouselGroup);
 
@@ -342,7 +340,7 @@ async function initHeroViewer() {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-  controls.target.set(0, 1.15, 0); // Alvo da câmera mais baixo
+  controls.target.set(0, 1.15, 0);
   controls.enablePan = false;
   controls.enableZoom = false; 
   controls.autoRotate = false; 
@@ -353,11 +351,9 @@ async function initHeroViewer() {
   
   const modelSpinSpeed = 1.2; 
   const timeSpinning = 4.0; 
-  const timeMoving = 2.5; // Mais tempo para a troca ser suave
+  const timeMoving = 2.5; 
   
-  // Variável para controlar a interpolação do carrossel
   let currentCarouselAngle = 0;
-
   const clock = new THREE.Clock();
 
   function animate() {
@@ -382,7 +378,6 @@ async function initHeroViewer() {
     else if (statePhase === 'moving_carousel') {
       const targetAngle = -((currentIndex + 1) / totalModels) * Math.PI * 2;
       
-      // INTERPOLAÇÃO SUAVE (Lerp) - Quanto maior o damping, mais devagar
       const smoothFactor = 1 - Math.exp(-3.0 * delta); 
       currentCarouselAngle += (targetAngle - currentCarouselAngle) * smoothFactor;
       
@@ -397,6 +392,11 @@ async function initHeroViewer() {
         phaseTimer = 0;
       }
     }
+
+    // CORREÇÃO: Mantém os manequins sempre de frente para o observador (câmera)
+    wrappers.forEach(w => {
+      w.rotation.y = -carouselGroup.rotation.y;
+    });
 
     renderer.render(scene, camera);
   }
