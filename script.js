@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
+// ⚠️ COLE AQUI A URL DO SEU WEB APP DO GOOGLE APPS SCRIPT
 const API_URL = 'https://script.google.com/macros/s/AKfycbxnUijRFoBQZqxjPNtcjercaHiO5oIxmMViYEC4tC_DLgxApjOjTw9WCU4Fb8NSJKf7/exec';
 
 const state = {
@@ -16,16 +17,17 @@ const $ = (s, r=document) => r.querySelector(s);
 window.__state = state;
 window.THREE = THREE;
 
-// (Mantenha as funções toast, apiGet, apiPost, createProceduralTexture iguais...)
 function toast(msg, isError=false) {
   let el = $('#toast');
   if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; document.body.appendChild(el); }
   el.textContent = msg; el.classList.toggle('error', isError); el.classList.add('show');
   clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 3000);
 }
+
 async function apiGet(action='getAll') {
   try { const r = await fetch(`${API_URL}?action=${action}`); return await r.json(); } catch (e) { return { ok: false }; }
 }
+
 async function apiPost(payload) {
   try { const r = await fetch(API_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(payload) }); return await r.json(); } catch (e) { return { ok: false }; }
 }
@@ -54,7 +56,34 @@ async function loadAvatarModel() {
   });
 }
 
-// ============ APLICAR TEXTURA FRENTE E COSTAS ============
+// ============ LIMPEZA DO MODELO ============
+// Remove as caixas brancas gigantes (bounding boxes) que o FBX exportou
+function cleanModel(root) {
+  const toRemove = [];
+  root.traverse((child) => {
+    if (child.isMesh) {
+      const nome = child.name.toLowerCase();
+      // Se for uma malha que não é a camisa, a calça ou o corpo, a gente esconde
+      if (
+        !nome.includes('body') && 
+        !nome.includes('shirt') && 
+        !nome.includes('sleeves') && 
+        !nome.includes('jeans') && 
+        !nome.includes('pants') &&
+        !nome.includes('ribbing')
+      ) {
+        // Se não for nenhuma peça conhecida do manequim, remove da cena
+        toRemove.push(child);
+      }
+    }
+  });
+  toRemove.forEach(mesh => {
+    mesh.visible = false;
+    if (mesh.parent) mesh.parent.remove(mesh);
+  });
+}
+
+// ============ APLICAR TEXTURA ============
 function applyTshirtTexture(root, frontTex, backTex, scale = 1.0, offsetX = 0, offsetY = 0) {
   root.traverse((child) => {
     if (child.isMesh) {
@@ -70,7 +99,6 @@ function applyTshirtTexture(root, frontTex, backTex, scale = 1.0, offsetX = 0, o
 
         const tex = isBack && backTex ? backTex : frontTex;
         
-        // Ajustes de textura (Tamanho e Posição)
         if (tex) {
           tex.center.set(0.5, 0.5);
           tex.repeat.set(scale, scale);
@@ -89,8 +117,10 @@ async function createViewer(el, cam, options = {}) {
   const h = el.clientHeight || 400;
 
   const scene = new THREE.Scene();
+  // Fundo levemente escuro para destacar o modelo
+  scene.background = new THREE.Color(0x151515); 
   const camera = new THREE.PerspectiveCamera(45, w/h, 0.1, 1000);
-  camera.position.set(0, 1.0, 3);
+  camera.position.set(0, 1.2, 3.5);
 
   const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
   renderer.setSize(w, h);
@@ -98,6 +128,7 @@ async function createViewer(el, cam, options = {}) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   el.appendChild(renderer.domElement);
 
+  // Luzes
   scene.add(new THREE.AmbientLight(0xffffff, 1.5));
   const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(2, 5, 4); scene.add(key);
   const fill = new THREE.DirectionalLight(0xffffff, 1.0); fill.position.set(-4, 3, 2); scene.add(fill);
@@ -107,27 +138,28 @@ async function createViewer(el, cam, options = {}) {
     const originalModel = await loadAvatarModel();
     const model = originalModel.clone(true);
     
-    // TRUQUE DE MESTRE: Força a matriz do modelo a resetar do zero
+    // 1. LIMPA AS CAIXAS BRANCAS
+    cleanModel(model);
+
+    // 2. RESETA TUDO
     model.matrixAutoUpdate = false;
     model.matrix.identity();
     model.position.set(0, 0, 0);
     model.scale.set(1, 1, 1);
     model.rotation.set(0, 0, 0);
 
-    // Cria uma caixa em volta do modelo
+    // 3. MEDE APENAS O QUE SOBROU (O manequim)
     const box = new THREE.Box3().setFromObject(model);
-    
-    // Se o modelo for gigante (como costuma vir do FBX), nós forçamos ele a ter 2 metros de altura
     const sizeY = box.max.y - box.min.y;
-    const targetHeight = 2.0;
-    const scaleFactor = targetHeight / sizeY;
     
-    // Aplica a escala matemática exata
+    // Se o tamanho for muito pequeno ou 0, força um valor padrão
+    const targetHeight = 2.0;
+    const scaleFactor = sizeY > 0 ? (targetHeight / sizeY) : 1;
+    
+    // 4. POSICIONA NO CHÃO (Pés em Y=0)
     const wrapper = new THREE.Group();
     wrapper.add(model);
     wrapper.scale.setScalar(scaleFactor);
-    
-    // Posiciona os pés no chão (Y=0) e centraliza
     wrapper.position.y = -(box.min.y * scaleFactor);
     wrapper.position.x = -(box.getCenter(new THREE.Vector3()).x * scaleFactor);
     wrapper.position.z = -(box.getCenter(new THREE.Vector3()).z * scaleFactor);
@@ -138,14 +170,18 @@ async function createViewer(el, cam, options = {}) {
 
     scene.add(wrapper);
 
+    // 5. CONTROLES DA CÂMERA
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
+    
+    // Foca no peito (metade da altura = 1.0)
     controls.target.set(0, 1.0, 0);
     
-    // ZOOM SEM LIMITES
-    controls.minDistance = 0.1;
-    controls.maxDistance = Infinity; 
+    // Câmera começa a 3.5 metros
+    camera.position.set(0, 1.0, 3.5);
+    controls.minDistance = 0.1; // Zoom infinito para dentro
+    controls.maxDistance = Infinity; // Zoom infinito para fora
     controls.enablePan = false;
     
     controls.autoRotate = options.autoRotate !== false;
@@ -178,7 +214,7 @@ async function createViewer(el, cam, options = {}) {
       zoomIn() { controls.dollyIn(1.2); controls.update(); },
       zoomOut() { controls.dollyOut(1.2); controls.update(); },
       resetCamera() {
-        camera.position.set(0, 1.0, 3);
+        camera.position.set(0, 1.0, 3.5);
         controls.target.set(0, 1.0, 0);
         controls.update();
       },
@@ -186,13 +222,14 @@ async function createViewer(el, cam, options = {}) {
     };
 
   } catch (error) {
+    console.error(error);
     el.innerHTML = '<p style="padding:20px;color:#ff4d4d;text-align:center;">⚠️ Erro ao carregar modelo.</p>';
     return null;
   }
 }
 window.__createViewer = createViewer;
 
-// (Restante do código: loadSite, renderProducts, initUI, ... igual ao anterior)
+// ============ CARREGAR SITE ============
 async function loadSite() {
   try {
     const data = await apiGet('getAll');
