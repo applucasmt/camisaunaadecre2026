@@ -57,43 +57,46 @@ function openAdminTab(tabId) {
 function renderConfigTab(container) {
   const c = window.__state.config;
   container.innerHTML = `
-    <h2 style="margin-bottom:24px;">Textos do Site</h2>
+    <h2 style="margin-bottom:24px;">Textos</h2>
     <div class="admin-form" id="configForm">
-      <div><label>Título</label><input name="titulo_site" value="${c.titulo_site || ''}"></div>
-      <div><label>Subtítulo</label><input name="subtitulo_site" value="${c.subtitulo_site || ''}"></div>
-      <button class="btn-primary" id="saveConfigBtn">Salvar Alterações</button>
-    </div>`;
+      <div><label>Título do Site</label><input name="titulo_site" value="${c.titulo_site || ''}"></div>
+      <div><label>Senha do Admin</label><input name="admin_senha" value="${c.admin_senha || ''}"></div>
+      <button class="btn-primary" id="saveConfigBtn">Salvar Configurações</button>
+    </div>
+  `;
   document.getElementById('saveConfigBtn').onclick = async () => {
-    const dados = {}; document.querySelectorAll('#configForm input').forEach(i => dados[i.name] = i.value);
+    const dados = {}; 
+    document.querySelectorAll('#configForm input').forEach(i => dados[i.name] = i.value);
     const r = await window.__apiPost({ action:'updateConfig', senha:getSenha(), dados });
-    if (r.ok) { 
-      Object.assign(window.__state.config, dados); 
-      window.__toast('Textos salvos com sucesso!', false); 
-    } else {
-      window.__toast('Erro ao salvar textos.', true);
-    }
+    if (r.ok) { Object.assign(window.__state.config, dados); window.__toast('Salvo!'); }
+    else window.__toast('Erro', true);
   };
 }
 
 function renderCamisetasTab(container) {
   container.innerHTML = `
-    <h2 style="margin-bottom:24px;">Modelos (${window.__state.camisetas.length})</h2>
+    <h2 style="margin-bottom:24px;">Modelos Cadastrados</h2>
     <div style="display:grid;gap:16px;">
       ${window.__state.camisetas.map(c => `
         <div style="border:1px solid var(--border);border-radius:12px;padding:20px;display:flex;gap:20px;align-items:center;">
-          <div style="flex:1;"><strong>${c.nome}</strong></div>
+          <div style="flex:1;">
+            <strong style="display:block; font-size:1.1rem;">${c.nome}</strong>
+            <span style="font-size:0.85rem; color:var(--text-dim);">${c.descricao || 'Sem descrição'}</span>
+          </div>
           <button class="btn-ghost" data-tex="${c.id}">Configurar 3D</button>
         </div>
       `).join('')}
-    </div>`;
-  container.querySelectorAll('[data-tex]').forEach(b => b.onclick = () => editCamisetaTexturas(parseInt(b.dataset.tex)));
+    </div>
+  `;
+  container.querySelectorAll('[data-tex]').forEach(b => 
+    b.onclick = () => editCamisetaTexturas(parseInt(b.dataset.tex))
+  );
 }
 
 function editCamisetaTexturas(id) {
   const c = window.__state.camisetas.find(x => String(x.id) === String(id));
   const content = document.getElementById('adminContent');
   
-  // Pega os valores atuais (mesmo se estiverem vazios)
   const cBase = c.cor_base || '#ffffff';
   const cCorpo = c.cor_corpo || '#e0e0e0';
   const cCabelo = c.cor_cabelo || '#333333';
@@ -101,15 +104,15 @@ function editCamisetaTexturas(id) {
   const cSapato = c.cor_sapato || '#ffffff';
 
   content.innerHTML = `
-    <h2 style="margin-bottom:16px;">Ajustes: ${c.nome}</h2>
+    <h2>Configurar: ${c.nome}</h2>
     
     <div style="background: #1a1a1a; border: 1px solid var(--accent); padding: 16px; border-radius: 12px; margin-bottom: 24px; display:flex; gap:20px; align-items:center;">
       <div style="font-size: 24px;">🖱️</div>
       <div style="flex:1; font-size:0.9rem; line-height:1.4;">
         <strong style="color:var(--accent);">Controles Interativos:</strong><br>
-        <b>Botão Esquerdo (Arrastar):</b> Move a textura da parte clicada.<br>
-        <b>Scroll do Mouse (na peça):</b> Aumenta/Diminui o zoom.<br>
-        <b>Botão Direito (Arrastar):</b> Gira o manequim.
+        <b>Botão Esquerdo (Arrastar):</b> Move a textura.<br>
+        <b>Scroll do Mouse:</b> Zoom na textura.<br>
+        <b>Botão Direito:</b> Gira o manequim.
       </div>
     </div>
 
@@ -117,44 +120,39 @@ function editCamisetaTexturas(id) {
       
       <div class="admin-form">
         
-        <!-- TEXTURA FRENTE -->
         <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
-          <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Textura Frente</h3>
-          <div><label>URL da Imagem (ou Base64)</label><input type="text" id="urlFrente" value="${c.textura_principal || ''}" placeholder="https://..."></div>
+          <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Frente</h3>
+          <div><label>URL / Base64</label><input type="text" id="urlFrente" value="${c.textura_principal || ''}"></div>
           <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileFrente" accept="image/*"></div>
         </div>
 
-        <!-- TEXTURA COSTAS -->
         <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
-          <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Textura Costas</h3>
-          <div><label>URL da Imagem (ou Base64)</label><input type="text" id="urlCostas" value="${c.textura_costas || ''}" placeholder="https://..."></div>
+          <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Costas</h3>
+          <div><label>URL / Base64</label><input type="text" id="urlCostas" value="${c.textura_costas || ''}"></div>
           <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileCostas" accept="image/*"></div>
         </div>
 
-        <!-- TEXTURA MANGA -->
         <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
-          <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Textura Mangas</h3>
-          <div><label>URL da Imagem (ou Base64)</label><input type="text" id="urlManga" value="${c.textura_manga || ''}" placeholder="https://..."></div>
+          <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Mangas</h3>
+          <div><label>URL / Base64</label><input type="text" id="urlManga" value="${c.textura_manga || ''}"></div>
           <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileManga" accept="image/*"></div>
         </div>
 
-        <!-- TEXTURA GOLA -->
         <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
-          <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Textura Gola</h3>
-          <div><label>URL da Imagem (ou Base64)</label><input type="text" id="urlGola" value="${c.textura_gola || ''}" placeholder="https://..."></div>
+          <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Gola</h3>
+          <div><label>URL / Base64</label><input type="text" id="urlGola" value="${c.textura_gola || ''}"></div>
           <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileGola" accept="image/*"></div>
         </div>
 
-        <!-- CORES DO MANEQUIM -->
         <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
           <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Cores do Manequim</h3>
           <div style="display:flex; gap:8px; margin-bottom:8px;">
-            <div style="flex:1"><label>Corpo</label><input type="color" id="corCorpo" value="${cCorpo}" style="height:40px; padding:4px; cursor:pointer;"></div>
-            <div style="flex:1"><label>Cabelo</label><input type="color" id="corCabelo" value="${cCabelo}" style="height:40px; padding:4px; cursor:pointer;"></div>
-            <div style="flex:1"><label>Calça</label><input type="color" id="corCalca" value="${cCalca}" style="height:40px; padding:4px; cursor:pointer;"></div>
-            <div style="flex:1"><label>Sapato</label><input type="color" id="corSapato" value="${cSapato}" style="height:40px; padding:4px; cursor:pointer;"></div>
+            <div style="flex:1"><label>Corpo</label><input type="color" id="corCorpo" value="${cCorpo}" style="height:40px; padding:4px; cursor:pointer; width:100%"></div>
+            <div style="flex:1"><label>Cabelo</label><input type="color" id="corCabelo" value="${cCabelo}" style="height:40px; padding:4px; cursor:pointer; width:100%"></div>
+            <div style="flex:1"><label>Calça</label><input type="color" id="corCalca" value="${cCalca}" style="height:40px; padding:4px; cursor:pointer; width:100%"></div>
+            <div style="flex:1"><label>Sapato</label><input type="color" id="corSapato" value="${cSapato}" style="height:40px; padding:4px; cursor:pointer; width:100%"></div>
           </div>
-          <div><label>Cor Base (Fundo se não tiver textura)</label><input type="color" id="corBase" value="${cBase}" style="height:40px; padding:4px; cursor:pointer; width:100%"></div>
+          <div><label>Cor Base (Fundo)</label><input type="color" id="corBase" value="${cBase}" style="height:40px; padding:4px; cursor:pointer; width:100%"></div>
         </div>
 
         <button class="btn-primary" id="saveCamisetaBtn" style="margin-top:10px;">Salvar Alterações</button>
@@ -175,7 +173,6 @@ function editCamisetaTexturas(id) {
   initAdminPreview(c).then(() => {
     if(!ADMIN.previewViewer) return;
 
-    // Cores em tempo real
     ['corCorpo', 'corCabelo', 'corCalca', 'corSapato'].forEach(id => {
       document.getElementById(id).oninput = () => {
         ADMIN.previewViewer.setColors({
@@ -191,7 +188,6 @@ function editCamisetaTexturas(id) {
       ADMIN.previewViewer.setTextures(null, null, null, null, ADMIN.previewViewer.getConfigs(), document.getElementById('corBase').value);
     };
 
-    // Uploads com Base64
     const handleUpload = async (e, inputId, textureKey) => {
       const file = e.target.files[0];
       if (file) {
@@ -214,7 +210,6 @@ function editCamisetaTexturas(id) {
     document.getElementById('fileManga').onchange = (e) => handleUpload(e, 'urlManga', 'manga');
     document.getElementById('fileGola').onchange = (e) => handleUpload(e, 'urlGola', 'gola');
 
-    // URLs
     const handleUrl = (e, textureKey) => {
       window.__loadTexture(e.target.value, c.cor_base).then(t => {
         const args = { frente: [t, null, null, null], costas: [null, t, null, null], manga: [null, null, t, null], gola: [null, null, null, t] }[textureKey];
@@ -226,7 +221,6 @@ function editCamisetaTexturas(id) {
     document.getElementById('urlManga').onchange = (e) => handleUrl(e, 'manga');
     document.getElementById('urlGola').onchange = (e) => handleUrl(e, 'gola');
 
-    // Salvar
     document.getElementById('saveCamisetaBtn').onclick = async () => {
       const cfgFrente = ADMIN.previewViewer.getConfigs().frente;
       const cfgCostas = ADMIN.previewViewer.getConfigs().costas;
