@@ -251,14 +251,12 @@ async function createAdminViewer(el, cam) {
     const { wrapper, spinner, model, textures, configs, mannequinColors } = await buildMannequin(cam);
     scene.add(wrapper);
 
-    // CONTROLES: Botão DIREITO gira o modelo, Scroll é desativado para dar lugar ao zoom da textura
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.1;
     controls.target.set(0, 1.2, 0); 
     controls.enablePan = false;
-    controls.enableZoom = false; // DESATIVADO para usar o scroll na textura
-    controls.autoRotate = false;
+    controls.enableZoom = false; // Scroll é usado para a textura
     
     // Configura o mouse: Esquerdo arrasta textura, Direito rotaciona câmera
     controls.mouseButtons = {
@@ -267,52 +265,74 @@ async function createAdminViewer(el, cam) {
       RIGHT: THREE.MOUSE.ROTATE
     };
 
-    // Configuração do Raycaster para editar a textura
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     let isDraggingTexture = false;
     let previousMousePosition = { x: 0, y: 0 };
     
-    // Encontra a malha da frente da camisa
-    let shirtMesh = null;
+    // Guarda as malhas da frente e de trás
+    let meshFrente = null;
+    let meshCostas = null;
+    
     model.traverse(child => {
-      if (child.isMesh && child.name.toLowerCase().includes('body_front')) {
-        shirtMesh = child;
+      if (child.isMesh) {
+        const nome = child.name.toLowerCase();
+        if (nome.includes('body_front')) meshFrente = child;
+        if (nome.includes('body_back')) meshCostas = child;
       }
     });
 
     const domElement = renderer.domElement;
     
+    // Identifica qual face está sendo clicada (Frente ou Costas)
+    function getTargetFace(event) {
+      const rect = domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      
+      raycaster.setFromCamera(mouse, camera);
+      
+      const intersects = raycaster.intersectObjects([meshFrente, meshCostas], true);
+      if (intersects.length > 0) {
+        const hit = intersects[0].object;
+        const nome = hit.name.toLowerCase();
+        if (nome.includes('body_front')) return { mesh: meshFrente, type: 'frente' };
+        if (nome.includes('body_back')) return { mesh: meshCostas, type: 'costas' };
+      }
+      return null;
+    }
+
     // Evento de clique para arrastar
     domElement.addEventListener('mousedown', (e) => {
       if (e.button === 0) { // Botão Esquerdo
-        const rect = domElement.getBoundingClientRect();
-        mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-        mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-        
-        raycaster.setFromCamera(mouse, camera);
-        if (shirtMesh) {
-          const intersects = raycaster.intersectObject(shirtMesh, true);
-          if (intersects.length > 0) {
-            isDraggingTexture = true;
-            previousMousePosition = { x: e.clientX, y: e.clientY };
-            domElement.style.cursor = 'grabbing';
-          }
+        const target = getTargetFace(e);
+        if (target) {
+          isDraggingTexture = true;
+          previousMousePosition = { x: e.clientX, y: e.clientY };
+          domElement.style.cursor = 'grabbing';
         }
       }
     });
 
     domElement.addEventListener('mousemove', (e) => {
-      if (isDraggingTexture && textures.frente) {
-        const deltaX = (e.clientX - previousMousePosition.x) / w;
-        const deltaY = (e.clientY - previousMousePosition.y) / h;
-        
-        // Inverte X e Y para o movimento ficar natural
-        configs.frente.x -= deltaX * 1.5; 
-        configs.frente.y += deltaY * 1.5;
-        
-        textures.frente.offset.set(configs.frente.x, configs.frente.y);
-        previousMousePosition = { x: e.clientX, y: e.clientY };
+      if (isDraggingTexture) {
+        const target = getTargetFace(e);
+        if (target) {
+          const type = target.type; // 'frente' ou 'costas'
+          const tex = type === 'frente' ? textures.frente : textures.costas;
+          const cfg = type === 'frente' ? configs.frente : configs.costas;
+
+          if (tex) {
+            const deltaX = (e.clientX - previousMousePosition.x) / w;
+            const deltaY = (e.clientY - previousMousePosition.y) / h;
+            
+            cfg.x -= deltaX * 1.5; 
+            cfg.y += deltaY * 1.5;
+            
+            tex.offset.set(cfg.x, cfg.y);
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+          }
+        }
       }
     });
 
@@ -323,24 +343,23 @@ async function createAdminViewer(el, cam) {
 
     // Evento de scroll para Zoom na textura
     domElement.addEventListener('wheel', (e) => {
-      const rect = domElement.getBoundingClientRect();
-      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-      
-      raycaster.setFromCamera(mouse, camera);
-      if (shirtMesh) {
-        const intersects = raycaster.intersectObject(shirtMesh, true);
-        if (intersects.length > 0) {
-          e.preventDefault(); // Impede a rolagem da página
+      const target = getTargetFace(e);
+      if (target) {
+        e.preventDefault(); // Impede a rolagem da página
+        const type = target.type; // 'frente' ou 'costas'
+        const tex = type === 'frente' ? textures.frente : textures.costas;
+        const cfg = type === 'frente' ? configs.frente : configs.costas;
+
+        if (tex) {
           const zoomFactor = 0.05;
           if (e.deltaY < 0) {
-            configs.frente.scale += zoomFactor; // Zoom in
+            cfg.scale += zoomFactor; // Zoom in
           } else {
-            configs.frente.scale -= zoomFactor; // Zoom out
+            cfg.scale -= zoomFactor; // Zoom out
           }
-          configs.frente.scale = Math.max(0.1, Math.min(5, configs.frente.scale)); // Limites
+          cfg.scale = Math.max(0.1, Math.min(5, cfg.scale)); // Limites
           
-          textures.frente.repeat.set(0.6 * configs.frente.scale, 0.6 * configs.frente.scale);
+          tex.repeat.set(0.6 * cfg.scale, 0.6 * cfg.scale);
         }
       }
     });
@@ -370,12 +389,12 @@ async function createAdminViewer(el, cam) {
       setTextures(f, c, m, g, cfgs, corBase) {
         if(f) {
           textures.frente = f;
-          // Reseta os configs visuais para a nova textura
-          configs.frente.x = 0;
-          configs.frente.y = 0;
-          configs.frente.scale = 1;
+          configs.frente.x = 0; configs.frente.y = 0; configs.frente.scale = 1;
         }
-        if(c) textures.costas = c;
+        if(c) {
+          textures.costas = c;
+          configs.costas.x = 0; configs.costas.y = 0; configs.costas.scale = 1;
+        }
         if(m) textures.manga = m;
         if(g) textures.gola = g;
         
@@ -402,7 +421,7 @@ async function createAdminViewer(el, cam) {
     return null;
   }
 }
-window.__createViewer = createAdminViewer; // Substitui a função original
+window.__createViewer = createAdminViewer; 
 
 // ==========================================
 // CORE: CÂMERA CINEMATOGRÁFICA E SCROLL
@@ -656,7 +675,7 @@ function initAdmin() {
         <div style="font-size: 24px;">🖱️</div>
         <div style="flex:1; font-size:0.9rem; line-height:1.4;">
           <strong style="color:var(--accent);">Controles Interativos:</strong><br>
-          <b>Botão Esquerdo (Arrastar):</b> Move a textura.<br>
+          <b>Botão Esquerdo (Arrastar):</b> Move a textura da face clicada (Frente ou Costas).<br>
           <b>Scroll do Mouse (na camisa):</b> Aumenta/Diminui o zoom da textura.<br>
           <b>Botão Direito (Arrastar):</b> Gira o manequim.
         </div>
@@ -755,16 +774,20 @@ function initAdmin() {
         });
       };
 
-      // Salvar
+      // Salvar (Agora salva Frente e Costas independentemente)
       document.getElementById('saveCamisetaBtn').onclick = async () => {
-        const cfg = ADMIN.previewViewer.getConfigs().frente;
+        const cfgFrente = ADMIN.previewViewer.getConfigs().frente;
+        const cfgCostas = ADMIN.previewViewer.getConfigs().costas;
         
         const dados = {
           textura_principal: document.getElementById('urlFrente').value,
           textura_costas: document.getElementById('urlCostas').value,
-          x_frente: cfg.x,
-          y_frente: cfg.y,
-          scale_frente: cfg.scale,
+          x_frente: cfgFrente.x,
+          y_frente: cfgFrente.y,
+          scale_frente: cfgFrente.scale,
+          x_costas: cfgCostas.x,
+          y_costas: cfgCostas.y,
+          scale_costas: cfgCostas.scale,
           cor_corpo: document.getElementById('corCorpo').value,
           cor_cabelo: document.getElementById('corCabelo').value,
           cor_calca: document.getElementById('corCalca').value,
