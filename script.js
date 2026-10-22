@@ -1,12 +1,23 @@
 // ⚠️ COLE AQUI a URL do seu Web App
 const API_URL = 'https://script.google.com/macros/s/SEU_ID_AQUI/exec';
 
+// ============ MODELO 3D (GLB) ============
+// X Bot do Mixamo — CC, hosted by Three.js (oficial)
+// Mesh da camiseta: "Beta_TShirt" (mesh separado, ótimo pra trocar textura)
+const AVATAR_URL = 'https://threejs.org/examples/models/gltf/Xbot.glb';
+const TSHIRT_MESH_NAME = 'Beta_TShirt';
+
+// Alternativas (descomente para trocar):
+// const AVATAR_URL = 'https://threejs.org/examples/models/gltf/Soldier.glb';
+// const AVATAR_URL = 'https://threejs.org/examples/models/gltf/RobotExpressive/RobotExpressive.glb';
+
 const state = {
   config: {},
   camisetas: [],
   heroViewer: null,
   productViewers: {},
-  modalViewer: null
+  modalViewer: null,
+  avatarReady: false
 };
 
 const $ = (s, r=document) => r.querySelector(s);
@@ -14,11 +25,7 @@ const $$ = (s, r=document) => [...r.querySelectorAll(s)];
 
 function toast(msg, isError=false) {
   let el = $('#toast');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'toast'; el.className = 'toast';
-    document.body.appendChild(el);
-  }
+  if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; document.body.appendChild(el); }
   el.textContent = msg;
   el.classList.toggle('error', isError);
   el.classList.add('show');
@@ -39,7 +46,7 @@ async function apiPost(payload) {
   return r.json();
 }
 
-// ============ CARREGAR ============
+// ============ CARREGAR SITE ============
 async function loadSite() {
   try {
     const data = await apiGet('getAll');
@@ -78,12 +85,10 @@ function createProceduralTexture(color) {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = color;
   ctx.fillRect(0, 0, 1024, 1024);
-  // tecido sutil
   for (let i = 0; i < 3000; i++) {
     ctx.fillStyle = `rgba(255,255,255,${Math.random()*0.03})`;
     ctx.fillRect(Math.random()*1024, Math.random()*1024, 1, 1);
   }
-  // costura
   ctx.strokeStyle = 'rgba(0,0,0,0.15)';
   ctx.lineWidth = 3;
   ctx.strokeRect(30, 30, 964, 964);
@@ -93,257 +98,167 @@ function createProceduralTexture(color) {
 }
 
 async function loadTexture(url, fallbackColor) {
-  if (!url) return createProceduralTexture(fallbackColor);
+  if (!url) return createProceduralTexture(fallbackColor || '#333');
   return new Promise(resolve => {
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin('anonymous');
-    loader.load(url, t => { t.anisotropy = 8; resolve(t); },
-      undefined, () => resolve(createProceduralTexture(fallbackColor)));
+    loader.load(url,
+      t => { t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace; resolve(t); },
+      undefined,
+      () => resolve(createProceduralTexture(fallbackColor || '#333'))
+    );
   });
 }
 
-// ============ GEOMETRIA DA CAMISETA ============
-function createTshirtGeometry() {
-  const shape = new THREE.Shape();
-  const w = 2.0, h = 3.0, neck = 0.5;
-
-  shape.moveTo(-w, h/2 - 0.6);
-  shape.lineTo(-w - 0.55, h/2);
-  shape.lineTo(-w - 0.75, h/2 - 0.55);
-  shape.lineTo(-w - 0.1, 0.35);
-  shape.lineTo(-w + 0.15, 0.35);
-  shape.lineTo(-w + 0.3, -h/2 + 0.35);
-  shape.lineTo(w - 0.3, -h/2 + 0.35);
-  shape.lineTo(w - 0.15, 0.35);
-  shape.lineTo(w + 0.1, 0.35);
-  shape.lineTo(w + 0.75, h/2 - 0.55);
-  shape.lineTo(w + 0.55, h/2);
-  shape.lineTo(w, h/2 - 0.6);
-  shape.quadraticCurveTo(neck, h/2 - 0.3, 0, h/2 - 0.8);
-  shape.quadraticCurveTo(-neck, h/2 - 0.3, -w, h/2 - 0.6);
-
-  const geo = new THREE.ExtrudeGeometry(shape, {
-    depth: 0.22, bevelEnabled: true,
-    bevelSegments: 3, bevelSize: 0.07, bevelThickness: 0.07, curveSegments: 24
+// ============ CARREGAR AVATAR GLB (cache global) ============
+let gltfCachePromise = null;
+function loadAvatarGLTF() {
+  if (gltfCachePromise) return gltfCachePromise;
+  gltfCachePromise = new Promise((resolve, reject) => {
+    const loader = new THREE.GLTFLoader();
+    loader.load(AVATAR_URL, resolve, undefined, reject);
   });
-  geo.center();
-  return geo;
+  return gltfCachePromise;
 }
 
-// ============ CRIAR MANEQUIM + CAMISETA ============
-// Retorna { group, tshirtMat, tshirtGeo, tshirtMesh }
-async function buildMannequin(cam) {
-  const group = new THREE.Group();
-
-  // Material do manequim (corpo neutro)
-  const skinMat = new THREE.MeshStandardMaterial({
-    color: 0x2a2a2a,
-    roughness: 0.65,
-    metalness: 0.15
+// Clona o avatar e retorna { root, tshirtMeshes: [] }
+function cloneAvatar(gltfScene) {
+  const clone = gltfScene.clone(true);
+  const tshirtMeshes = [];
+  clone.traverse(obj => {
+    if (obj.isMesh) {
+      obj.castShadow = true;
+      obj.receiveShadow = true;
+      // material duplicado para não afetar as outras instâncias
+      obj.material = obj.material.clone();
+      // procura a mesh da camiseta
+      if (obj.name && obj.name.toLowerCase().includes('tshirt')) {
+        tshirtMeshes.push(obj);
+      }
+      // também aceita variações comuns
+      const name = (obj.name || '').toLowerCase();
+      if (name.includes('shirt') || name.includes('body')) {
+        // algumas versões do Xbot chamam "Beta_Body" / "Alpha_Body" e a camisa é "Beta_TShirt"
+        if (!tshirtMeshes.includes(obj) && name.includes('shirt')) tshirtMeshes.push(obj);
+      }
+    }
   });
-
-  // ===== CORPO (tronco) =====
-  const torso = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.85, 0.75, 2.4, 48, 1, false),
-    skinMat
-  );
-  torso.position.y = 0.2;
-  group.add(torso);
-
-  // Ombros arredondados
-  const shoulders = new THREE.Mesh(
-    new THREE.SphereGeometry(0.9, 32, 24, 0, Math.PI*2, 0, Math.PI/2),
-    skinMat
-  );
-  shoulders.position.y = 1.4;
-  group.add(shoulders);
-
-  // ===== PESCOÇO =====
-  const neck = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.28, 0.32, 0.55, 32),
-    skinMat
-  );
-  neck.position.y = 1.85;
-  group.add(neck);
-
-  // ===== CABEÇA =====
-  const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.48, 32, 32),
-    skinMat
-  );
-  head.position.y = 2.55;
-  head.scale.set(0.9, 1.05, 0.95);
-  group.add(head);
-
-  // ===== BRAÇOS =====
-  function makeArm(side) {
-    const armGroup = new THREE.Group();
-    // Braço superior
-    const upper = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.18, 0.85, 8, 16),
-      skinMat
-    );
-    upper.position.y = -0.5;
-    armGroup.add(upper);
-    // Antebraço
-    const fore = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.15, 0.8, 8, 16),
-      skinMat
-    );
-    fore.position.y = -1.35;
-    armGroup.add(fore);
-    // Mão
-    const hand = new THREE.Mesh(
-      new THREE.SphereGeometry(0.17, 16, 16),
-      skinMat
-    );
-    hand.position.y = -1.9;
-    hand.scale.set(1, 1.3, 0.6);
-    armGroup.add(hand);
-
-    armGroup.position.set(side * 1.15, 1.15, 0);
-    armGroup.rotation.z = side * 0.12;
-    return armGroup;
-  }
-  group.add(makeArm(-1));
-  group.add(makeArm(1));
-
-  // ===== PERNAS =====
-  function makeLeg(side) {
-    const legGroup = new THREE.Group();
-    const thigh = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.22, 1.0, 8, 16),
-      skinMat
-    );
-    thigh.position.y = -0.6;
-    legGroup.add(thigh);
-    const shin = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.17, 0.95, 8, 16),
-      skinMat
-    );
-    shin.position.y = -1.7;
-    legGroup.add(shin);
-    const foot = new THREE.Mesh(
-      new THREE.BoxGeometry(0.28, 0.15, 0.5),
-      skinMat
-    );
-    foot.position.set(0, -2.35, 0.12);
-    legGroup.add(foot);
-
-    legGroup.position.set(side * 0.42, -1.2, 0);
-    return legGroup;
-  }
-  group.add(makeLeg(-1));
-  group.add(makeLeg(1));
-
-  // ===== SUPORTE (base do manequim) =====
-  const baseMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4, metalness: 0.6 });
-  const pole = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.06, 0.06, 1.0, 16),
-    baseMat
-  );
-  pole.position.y = -4.9;
-  group.add(pole);
-
-  const base = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.55, 0.65, 0.12, 48),
-    baseMat
-  );
-  base.position.y = -5.45;
-  group.add(base);
-
-  // ===== CAMISETA =====
-  const tex = await loadTexture(cam.textura_principal, cam.cor_base || '#222');
-  const tshirtGeo = createTshirtGeometry();
-  const tshirtMat = new THREE.MeshStandardMaterial({
-    map: tex,
-    color: 0xffffff,
-    roughness: 0.85,
-    metalness: 0.05,
-    side: THREE.DoubleSide
-  });
-  const tshirt = new THREE.Mesh(tshirtGeo, tshirtMat);
-  tshirt.scale.set(1.05, 1.05, 1.05);
-  tshirt.position.y = 0.35;
-  group.add(tshirt);
-
-  // Mangas adicionais (se textura separada)
-  if (cam.textura_manga) {
-    const mangaTex = await loadTexture(cam.textura_manga, '#111');
-    const mangaMat = new THREE.MeshStandardMaterial({ map: mangaTex, roughness: 0.9 });
-    const mgGeo = new THREE.CapsuleGeometry(0.24, 0.5, 8, 16);
-    const mL = new THREE.Mesh(mgGeo, mangaMat); mL.position.set(-1.15, 1.0, 0); mL.rotation.z = 0.15; group.add(mL);
-    const mR = new THREE.Mesh(mgGeo, mangaMat); mR.position.set(1.15, 1.0, 0); mR.rotation.z = -0.15; group.add(mR);
-  }
-
-  return { group, tshirtMat, tshirtGeo, tshirt };
+  return { root: clone, tshirtMeshes };
 }
 
-// ============ VIEWER REUTILIZÁVEL ============
+// Aplica textura em todas as meshes da camiseta do clone
+function applyTshirtTexture(tshirtMeshes, texture) {
+  tshirtMeshes.forEach(mesh => {
+    if (!mesh.material) return;
+    // Pode ser material único ou array
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    mats.forEach(mat => {
+      mat.map = texture;
+      mat.color = new THREE.Color(0xffffff);
+      mat.needsUpdate = true;
+    });
+  });
+}
+
+// ============ CRIAR VIEWER REUTILIZÁVEL ============
 async function createViewer(el, cam, options = {}) {
   const w = el.clientWidth || 400;
   const h = el.clientHeight || 400;
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(35, w/h, 0.1, 200);
-  camera.position.set(0, 0.5, 10);
+  camera.position.set(0, 1.5, 4.5);
 
   const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
   renderer.setSize(w, h);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.1;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   el.appendChild(renderer.domElement);
 
-  // Luzes cinematográficas
-  scene.add(new THREE.AmbientLight(0xffffff, 0.4));
-  const key = new THREE.DirectionalLight(0xffffff, 1.5); key.position.set(4, 6, 5); scene.add(key);
-  const fill = new THREE.DirectionalLight(0xffffff, 0.6); fill.position.set(-5, 3, 2); scene.add(fill);
-  const rim = new THREE.DirectionalLight(0xd4af37, 0.9); rim.position.set(0, -2, -5); scene.add(rim);
-  const top = new THREE.PointLight(0xd4af37, 0.5, 20); top.position.set(0, 6, 0); scene.add(top);
+  // Iluminação
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  const key = new THREE.DirectionalLight(0xffffff, 2.0);
+  key.position.set(3, 6, 4);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  scene.add(key);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.8);
+  fill.position.set(-4, 3, 2);
+  scene.add(fill);
+  const rim = new THREE.DirectionalLight(0xd4af37, 1.0);
+  rim.position.set(0, 2, -5);
+  scene.add(rim);
 
-  const { group, tshirtMat } = await buildMannequin(cam);
-  group.position.y = 1.0; // centraliza na altura da camiseta
-  scene.add(group);
+  // Chão sutil
+  const floor = new THREE.Mesh(
+    new THREE.CircleGeometry(4, 48),
+    new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 1, metalness: 0 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = 0;
+  floor.receiveShadow = true;
+  scene.add(floor);
 
-  // OrbitControls (rotação, zoom, pan)
+  // Carrega o avatar
+  const gltf = await loadAvatarGLTF();
+  const { root, tshirtMeshes } = cloneAvatar(gltf.scene);
+
+  // Enquadra o avatar
+  const box = new THREE.Box3().setFromObject(root);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+
+  // Xbot tem ~1.8 unidades. Normaliza para ~1.8 no eixo Y
+  const targetHeight = 1.8;
+  const scale = targetHeight / size.y;
+  root.scale.setScalar(scale);
+  root.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
+
+  scene.add(root);
+
+  // Posiciona câmera
+  controlsTarget = new THREE.Vector3(0, 1.0, 0);
+
   const controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
   controls.rotateSpeed = 0.8;
   controls.zoomSpeed = 1.2;
-  controls.panSpeed = 0.6;
-  controls.minDistance = 4;
-  controls.maxDistance = 20;
-  controls.target.set(0, 1.0, 0);
+  controls.minDistance = 2.0;
+  controls.maxDistance = 10;
+  controls.target.copy(controlsTarget);
   controls.enablePan = true;
-  controls.enableZoom = true;
+  controls.maxPolarAngle = Math.PI * 0.9;
+  controls.minPolarAngle = Math.PI * 0.1;
+  controls.autoRotate = options.autoRotate !== false;
+  controls.autoRotateSpeed = 1.5;
+  // pausa rotação automática ao interagir
+  let pauseUntil = 0;
+  const onInteract = () => { pauseUntil = performance.now() + 2500; };
+  renderer.domElement.addEventListener('pointerdown', onInteract);
+  renderer.domElement.addEventListener('wheel', onInteract, { passive: true });
+  renderer.domElement.addEventListener('touchstart', onInteract, { passive: true });
 
-  // Auto rotação (pausa ao interagir)
-  let autoRotate = options.autoRotate !== false;
-  let lastInteract = 0;
+  // Aplica textura inicial
+  const tex = await loadTexture(cam.textura_principal, cam.cor_base);
+  applyTshirtTexture(tshirtMeshes, tex);
 
+  // Loop
   const clock = new THREE.Clock();
   let animId;
   function animate() {
     animId = requestAnimationFrame(animate);
     const t = clock.getElapsedTime();
+    controls.autoRotate = (performance.now() > pauseUntil) && (options.autoRotate !== false);
     controls.update();
-
-    if (autoRotate && Date.now() - lastInteract > 2500) {
-      group.rotation.y += 0.005;
-    }
-    // leve flutuação
-    group.position.y = 1.0 + Math.sin(t * 0.8) * 0.03;
-
+    // respiração sutil
+    root.position.y = Math.sin(t * 0.9) * 0.01;
     renderer.render(scene, camera);
   }
   animate();
-
-  const onInteract = () => { lastInteract = Date.now(); };
-  renderer.domElement.addEventListener('pointerdown', onInteract);
-  renderer.domElement.addEventListener('wheel', onInteract, { passive: true });
-  renderer.domElement.addEventListener('touchstart', onInteract, { passive: true });
 
   // Resize
   const ro = new ResizeObserver(() => {
@@ -356,10 +271,11 @@ async function createViewer(el, cam, options = {}) {
   ro.observe(el);
 
   return {
-    scene, camera, renderer, group, controls, tshirtMat,
-    setAutoRotate(v) { autoRotate = v; },
+    scene, camera, renderer, controls, root, tshirtMeshes,
+    setAutoRotate(v) { controls.autoRotate = v; if (!v) pauseUntil = Infinity; else pauseUntil = 0; },
+    setTexture(texture) { applyTshirtTexture(tshirtMeshes, texture); },
     resetCamera() {
-      camera.position.set(0, 0.5, 10);
+      camera.position.set(0, 1.5, 4.5);
       controls.target.set(0, 1.0, 0);
       controls.update();
     },
@@ -372,7 +288,16 @@ async function createViewer(el, cam, options = {}) {
   };
 }
 
-// ============ RENDER PRODUTOS ============
+// ============ HERO ============
+async function initHeroViewer() {
+  const el = document.getElementById('heroViewer');
+  if (!el) return;
+  const cam = state.camisetas[0];
+  if (!cam) return;
+  state.heroViewer = await createViewer(el, cam, { autoRotate: true });
+}
+
+// ============ PRODUTOS ============
 function renderProducts() {
   const grid = $('#productsGrid');
   grid.innerHTML = '';
@@ -393,43 +318,33 @@ function renderProducts() {
     `;
     grid.appendChild(card);
 
-    // Inicializa viewer da grade
     setTimeout(async () => {
       const viewerEl = document.getElementById(`viewer-${cam.id}`);
       if (!viewerEl) return;
-      const v = await createViewer(viewerEl, cam, { autoRotate: true });
-      state.productViewers[cam.id] = v;
-    }, 200 * idx);
+      try {
+        const v = await createViewer(viewerEl, cam, { autoRotate: true });
+        state.productViewers[cam.id] = v;
+      } catch (e) {
+        console.error('Falha ao carregar avatar:', e);
+        viewerEl.innerHTML = '<p style="color:#a0a0a0;padding:20px;font-size:.85rem;">Modelo 3D indisponível</p>';
+      }
+    }, 150 * idx);
 
     card.querySelector('[data-explore]').onclick = () => openFullViewer(cam);
   });
 }
 
-// ============ HERO VIEWER ============
-async function initHeroViewer() {
-  const el = document.getElementById('heroViewer');
-  if (!el) return;
-  // usa a primeira camiseta como destaque
-  const cam = state.camisetas[0];
-  if (!cam) return;
-  state.heroViewer = await createViewer(el, cam, { autoRotate: true });
-}
-
-// ============ FULLSCREEN VIEWER ============
+// ============ MODAL FULLSCREEN ============
 async function openFullViewer(cam) {
   const modal = document.getElementById('viewerModal');
   document.getElementById('viewerTitle').textContent = cam.nome;
   document.getElementById('viewerDesc').textContent = cam.descricao || '';
   modal.classList.add('active');
 
-  if (state.modalViewer) {
-    state.modalViewer.destroy();
-    state.modalViewer = null;
-  }
+  if (state.modalViewer) { state.modalViewer.destroy(); state.modalViewer = null; }
 
   const el = document.getElementById('fullViewer');
-  // aguarda um frame para o elemento ter tamanho
-  await new Promise(r => setTimeout(r, 50));
+  await new Promise(r => setTimeout(r, 60));
   state.modalViewer = await createViewer(el, cam, { autoRotate: true });
 }
 
@@ -443,23 +358,17 @@ function initUI() {
   menuBtn?.addEventListener('click', () => nav.classList.toggle('open'));
   $$('.nav a').forEach(a => a.addEventListener('click', () => nav.classList.remove('open')));
 
-  // Fechar modal
   document.getElementById('closeViewer').onclick = () => {
     document.getElementById('viewerModal').classList.remove('active');
-    if (state.modalViewer) {
-      state.modalViewer.destroy();
-      state.modalViewer = null;
-    }
+    if (state.modalViewer) { state.modalViewer.destroy(); state.modalViewer = null; }
   };
-  document.getElementById('resetView').onclick = () => {
-    state.modalViewer?.resetCamera();
-  };
+  document.getElementById('resetView').onclick = () => state.modalViewer?.resetCamera();
   document.getElementById('toggleAuto').onclick = (e) => {
     if (!state.modalViewer) return;
-    const current = e.target.dataset.paused === '1';
-    state.modalViewer.setAutoRotate(current);
-    e.target.dataset.paused = current ? '0' : '1';
-    e.target.textContent = current ? 'Pausar rotação' : 'Retomar rotação';
+    const paused = e.target.dataset.paused === '1';
+    state.modalViewer.setAutoRotate(paused);
+    e.target.dataset.paused = paused ? '0' : '1';
+    e.target.textContent = paused ? 'Pausar rotação' : 'Retomar rotação';
   };
 }
 
@@ -470,13 +379,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   await initHeroViewer();
 });
 
-// expõe para admin
+// expõe para admin.js
 window.__state = state;
 window.__apiPost = apiPost;
 window.__apiGet = apiGet;
 window.__toast = toast;
 window.__loadTexture = loadTexture;
-window.__createTshirtGeometry = createTshirtGeometry;
 window.__createProceduralTexture = createProceduralTexture;
-window.__buildMannequin = buildMannequin;
+window.__loadAvatarGLTF = loadAvatarGLTF;
+window.__cloneAvatar = cloneAvatar;
+window.__applyTshirtTexture = applyTshirtTexture;
 window.__createViewer = createViewer;
+window.__AVATAR_URL = AVATAR_URL;
