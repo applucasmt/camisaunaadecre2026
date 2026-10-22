@@ -66,7 +66,7 @@ function loadAvatarModel() {
   return gltfPromise;
 }
 
-// ============ APLICAR TEXTURAS E CORES ============
+// ============ APLICAR TEXTURAS (LIVRE E SEM TRAVAS) ============
 function applyTshirtTexture(root, textures, configs) {
   root.traverse(child => {
     if (!child.isMesh) return;
@@ -86,9 +86,31 @@ function applyTshirtTexture(root, textures, configs) {
       mat.side = THREE.DoubleSide;
 
       if (tex) {
-        tex.center.set(0.5, 0.5); 
-        tex.repeat.set(cfg.scale || 1, cfg.scale || 1);
-        tex.offset.set(cfg.x || 0, cfg.y || 0);
+        // Cria uma matriz de transformação independente para o offset e escala
+        const matrix = new THREE.Matrix3();
+        // Move para o centro (0.5, 0.5)
+        matrix.set(
+          1, 0, 0.5,
+          0, 1, 0.5,
+          0, 0, 1
+        );
+        // Aplica a translação (posição do mouse)
+        const translation = new THREE.Matrix3().set(
+          1, 0, cfg.x || 0,
+          0, 1, cfg.y || 0,
+          0, 0, 1
+        );
+        // Aplica a escala (zoom do scroll)
+        const scale = new THREE.Matrix3().set(
+          cfg.scale || 1, 0, 0,
+          0, cfg.scale || 1, 0,
+          0, 0, 1
+        );
+        // Aplica a rotação de 180 no Y (pois invertemos o flipY)
+        matrix.multiply(translation).multiply(scale);
+
+        tex.matrixAutoUpdate = false;
+        tex.matrix.copy(matrix);
         mat.map = tex;
         mat.color.setHex(0xffffff);
       } else {
@@ -105,18 +127,18 @@ function applyMannequinColors(root, colors) {
     if (!child.isMesh) return;
     const nome = child.name.toLowerCase();
     
-    // Identifica as partes
-    const isHair = nome.includes('hair') || nome.includes('cabelo');
-    const isPants = nome.includes('jeans') || nome.includes('pants') || nome.includes('calca');
-    
-    // O resto do corpo (que não é camisa e nem cabelo/calça) será a pele/corpo
     const isShirt = nome.includes('body_front') || nome.includes('body_back') || nome.includes('sleeves') || nome.includes('ribbing');
-    const isBody = !isShirt && !isHair && !isPants;
+    if (isShirt) return; // Ignora a camisa
 
     let colorHex = null;
-    if (isHair) colorHex = colors.cabelo;
-    else if (isPants) colorHex = colors.calca;
-    else if (isBody) colorHex = colors.corpo;
+    if (nome.includes('hair') || nome.includes('cabelo')) {
+      colorHex = colors.cabelo;
+    } else if (nome.includes('jeans') || nome.includes('pants') || nome.includes('calca') || nome.includes('leg') || nome.includes('shoe')) {
+      colorHex = colors.calca;
+    } else {
+      // Tudo que não é camisa, nem cabelo, nem calça é corpo (pele)
+      colorHex = colors.corpo;
+    }
 
     if (colorHex) {
       const mats = Array.isArray(child.material) ? child.material : [child.material];
@@ -185,7 +207,6 @@ async function createViewer(el, cam, options = {}) {
       gola: { scale: parseFloat(cam.scale_gola)||1, x: 0, y: 0 }
     };
 
-    // Cores do manequim
     const mannequinColors = {
       corpo: cam.cor_corpo || '#e0e0e0',
       cabelo: cam.cor_cabelo || '#333333',
@@ -225,10 +246,9 @@ async function createViewer(el, cam, options = {}) {
         const dy = (e.clientY - prevY) * 0.005;
         prevX = e.clientX; prevY = e.clientY;
         
+        // Ajuste de direção para ficar natural
         currentTexConfig.x -= dx; 
         currentTexConfig.y += dy;
-        currentTexConfig.x = Math.max(-2, Math.min(2, currentTexConfig.x));
-        currentTexConfig.y = Math.max(-2, Math.min(2, currentTexConfig.y));
         
         applyTshirtTexture(model, textures, configs);
       }
