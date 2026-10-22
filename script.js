@@ -2,17 +2,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-// ⚠️ COLE AQUI A URL DO SEU WEB APP DO GOOGLE APPS SCRIPT
 const API_URL = 'https://script.google.com/macros/s/AKfycbxnUijRFoBQZqxjPNtcjercaHiO5oIxmMViYEC4tC_DLgxApjOjTw9WCU4Fb8NSJKf7/exec';
 
-const state = {
-  config: {},
-  camisetas: [],
-  heroViewer: null,
-  productViewers: {},
-  modalViewer: null
-};
-
+const state = { config: {}, camisetas: [], heroViewer: null, productViewers: {}, modalViewer: null };
 const $ = (s, r=document) => r.querySelector(s);
 window.__state = state;
 window.THREE = THREE;
@@ -37,7 +29,7 @@ async function loadTexture(url, fallbackColor) {
   if (!url) {
     const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 512;
     const ctx = canvas.getContext('2d'); ctx.fillStyle = fallbackColor || '#333'; ctx.fillRect(0,0,512,512);
-    const tex = new THREE.CanvasTexture(canvas); tex.colorSpace = THREE.SRGBColorSpace; return tex;
+    return new THREE.CanvasTexture(canvas);
   }
   return new Promise(resolve => {
     const loader = new THREE.TextureLoader();
@@ -53,33 +45,6 @@ async function loadAvatarModel() {
   const loader = new GLTFLoader();
   return new Promise((resolve, reject) => {
     loader.load('./camisa.glb', (gltf) => { gltfCache = gltf.scene; resolve(gltfCache); }, undefined, reject);
-  });
-}
-
-// ============ LIMPEZA DO MODELO ============
-// Remove as caixas brancas gigantes (bounding boxes) que o FBX exportou
-function cleanModel(root) {
-  const toRemove = [];
-  root.traverse((child) => {
-    if (child.isMesh) {
-      const nome = child.name.toLowerCase();
-      // Se for uma malha que não é a camisa, a calça ou o corpo, a gente esconde
-      if (
-        !nome.includes('body') && 
-        !nome.includes('shirt') && 
-        !nome.includes('sleeves') && 
-        !nome.includes('jeans') && 
-        !nome.includes('pants') &&
-        !nome.includes('ribbing')
-      ) {
-        // Se não for nenhuma peça conhecida do manequim, remove da cena
-        toRemove.push(child);
-      }
-    }
-  });
-  toRemove.forEach(mesh => {
-    mesh.visible = false;
-    if (mesh.parent) mesh.parent.remove(mesh);
   });
 }
 
@@ -117,9 +82,10 @@ async function createViewer(el, cam, options = {}) {
   const h = el.clientHeight || 400;
 
   const scene = new THREE.Scene();
-  // Fundo levemente escuro para destacar o modelo
   scene.background = new THREE.Color(0x151515); 
   const camera = new THREE.PerspectiveCamera(45, w/h, 0.1, 1000);
+  
+  // Câmera fixa apontando para o centro do modelo
   camera.position.set(0, 1.2, 3.5);
 
   const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
@@ -128,7 +94,7 @@ async function createViewer(el, cam, options = {}) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   el.appendChild(renderer.domElement);
 
-  // Luzes
+  // Iluminação
   scene.add(new THREE.AmbientLight(0xffffff, 1.5));
   const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(2, 5, 4); scene.add(key);
   const fill = new THREE.DirectionalLight(0xffffff, 1.0); fill.position.set(-4, 3, 2); scene.add(fill);
@@ -138,28 +104,43 @@ async function createViewer(el, cam, options = {}) {
     const originalModel = await loadAvatarModel();
     const model = originalModel.clone(true);
     
-    // 1. LIMPA AS CAIXAS BRANCAS
-    cleanModel(model);
+    // 1. LIMPEZA AGRESSIVA: Remove malhas muito grandes ou muito pequenas (caixas de colisão)
+    const toRemove = [];
+    model.traverse((child) => {
+      if (child.isMesh) {
+        const nome = child.name.toLowerCase();
+        // Mantém apenas o que é camisa, calça ou corpo
+        const keep = nome.includes('body') || nome.includes('shirt') || nome.includes('sleeves') || nome.includes('jeans') || nome.includes('pants') || nome.includes('ribbing');
+        if (!keep) {
+          toRemove.push(child);
+        }
+      }
+    });
+    toRemove.forEach(m => { m.visible = false; if(m.parent) m.parent.remove(m); });
 
-    // 2. RESETA TUDO
-    model.matrixAutoUpdate = false;
-    model.matrix.identity();
+    // 2. RESET MATEMÁTICO: Força o modelo a ficar no centro e com escala 1
     model.position.set(0, 0, 0);
-    model.scale.set(1, 1, 1);
     model.rotation.set(0, 0, 0);
+    model.scale.set(1, 1, 1);
+    
+    // Atualiza a matriz para garantir que o Three.js leia a nova posição zerada
+    model.updateMatrixWorld(true);
 
-    // 3. MEDE APENAS O QUE SOBROU (O manequim)
+    // 3. MEDE O MODELO LIMPO
     const box = new THREE.Box3().setFromObject(model);
     const sizeY = box.max.y - box.min.y;
     
-    // Se o tamanho for muito pequeno ou 0, força um valor padrão
+    // 4. FORÇA A ALTURA PARA 2 METROS
     const targetHeight = 2.0;
-    const scaleFactor = sizeY > 0 ? (targetHeight / sizeY) : 1;
+    // Se a altura for 0 (deu erro), usa 1 como fallback
+    const scaleFactor = sizeY > 0.1 ? (targetHeight / sizeY) : 1;
     
-    // 4. POSICIONA NO CHÃO (Pés em Y=0)
+    // 5. AGRUPA E POSICIONA NO CHÃO
     const wrapper = new THREE.Group();
     wrapper.add(model);
     wrapper.scale.setScalar(scaleFactor);
+    
+    // Coloca os pés no chão (Y=0) e centraliza em X e Z
     wrapper.position.y = -(box.min.y * scaleFactor);
     wrapper.position.x = -(box.getCenter(new THREE.Vector3()).x * scaleFactor);
     wrapper.position.z = -(box.getCenter(new THREE.Vector3()).z * scaleFactor);
@@ -170,20 +151,14 @@ async function createViewer(el, cam, options = {}) {
 
     scene.add(wrapper);
 
-    // 5. CONTROLES DA CÂMERA
+    // 6. CONTROLES
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-    
-    // Foca no peito (metade da altura = 1.0)
-    controls.target.set(0, 1.0, 0);
-    
-    // Câmera começa a 3.5 metros
-    camera.position.set(0, 1.0, 3.5);
-    controls.minDistance = 0.1; // Zoom infinito para dentro
-    controls.maxDistance = Infinity; // Zoom infinito para fora
+    controls.target.set(0, 1.0, 0); // Foca no peito
+    controls.minDistance = 0.1; 
+    controls.maxDistance = Infinity; 
     controls.enablePan = false;
-    
     controls.autoRotate = options.autoRotate !== false;
     controls.autoRotateSpeed = 1.5;
 
@@ -214,7 +189,7 @@ async function createViewer(el, cam, options = {}) {
       zoomIn() { controls.dollyIn(1.2); controls.update(); },
       zoomOut() { controls.dollyOut(1.2); controls.update(); },
       resetCamera() {
-        camera.position.set(0, 1.0, 3.5);
+        camera.position.set(0, 1.2, 3.5);
         controls.target.set(0, 1.0, 0);
         controls.update();
       },
