@@ -19,10 +19,11 @@ body {
   line-height: 1.5;
 }
 
-/* ============ HEADER MINIMALISTA ============ */
+/* ============ HEADER (SÓ LOGO, CENTRALIZADO) ============ */
 .header {
   position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
-  display: flex; justify-content: center; /* Centraliza a logo */
+  display: flex; 
+  justify-content: center; /* Centraliza o logo */
   align-items: center;
   padding: 24px 48px;
   background: linear-gradient(to bottom, rgba(0,0,0,0.8), rgba(0,0,0,0));
@@ -38,7 +39,7 @@ body {
 }
 .logo span { color: var(--accent); margin: 0 4px; }
 
-/* ============ CANVAS 3D FIXO ============ */
+/* ============ CANVAS 3D ============ */
 .canvas-wrapper {
   position: fixed; top: 0; left: 0;
   width: 100vw; height: 100vh;
@@ -48,7 +49,6 @@ body {
 
 #webgl-container { width: 100%; height: 100%; }
 
-/* Overlay suave para dar foco no modelo central */
 .canvas-overlay {
   position: absolute; inset: 0;
   background: radial-gradient(circle at center, transparent 30%, rgba(0,0,0,0.7) 100%);
@@ -64,7 +64,7 @@ body {
   padding: 0 10vw;
 }
 
-/* ============ CAIXAS DE TEXTO (GLASSMORPHISM) ============ */
+/* ============ CAIXAS DE TEXTO ============ */
 .content-box {
   max-width: 420px;
   background: rgba(10, 10, 10, 0.5);
@@ -94,7 +94,7 @@ h1 { font-size: clamp(3rem, 6vw, 5rem); font-weight: 800; line-height: 1.05; let
 h2 { font-size: clamp(2rem, 4vw, 3.5rem); font-weight: 700; line-height: 1.1; letter-spacing: -1.5px; margin-bottom: 16px; }
 p { font-size: clamp(1rem, 1.2vw, 1.25rem); color: var(--text-dim); font-weight: 400; }
 
-/* ============ TEXTO DE INSTRUÇÃO INICIAL ============ */
+/* ============ MENSAGEM INICIAL (ANIMADA) ============ */
 .instruction-text {
   font-size: 1.1rem;
   color: var(--text);
