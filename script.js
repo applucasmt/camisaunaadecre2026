@@ -1,40 +1,41 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 
-// ⚠️ COLE AQUI A URL DO SEU WEB APP DO GOOGLE APPS SCRIPT
+// ⚠️ URL DO SEU WEB APP DO GOOGLE APPS SCRIPT
 const API_URL = 'https://script.google.com/macros/s/AKfycbxnUijRFoBQZqxjPNtcjercaHiO5oIxmMViYEC4tC_DLgxApjOjTw9WCU4Fb8NSJKf7/exec';
 
 const state = { config: {}, camisetas: [], heroViewer: null, productViewers: {}, modalViewer: null };
-const $ = (s, r=document) => r.querySelector(s);
+const $ = (s, r = document) => r.querySelector(s);
 window.__state = state;
 window.THREE = THREE;
 
-function toast(msg, isError=false) {
+function toast(msg, isError = false) {
   let el = $('#toast');
   if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; document.body.appendChild(el); }
   el.textContent = msg; el.classList.toggle('error', isError); el.classList.add('show');
   clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 3000);
 }
 
-async function apiGet(action='getAll') {
+async function apiGet(action = 'getAll') {
   try { const r = await fetch(`${API_URL}?action=${action}`); return await r.json(); } catch (e) { return { ok: false }; }
 }
 
 async function apiPost(payload) {
-  try { const r = await fetch(API_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(payload) }); return await r.json(); } catch (e) { return { ok: false }; }
+  try {
+    const r = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) });
+    return await r.json();
+  } catch (e) { return { ok: false }; }
 }
 window.__apiPost = apiPost;
 
 // ============ CORREÇÃO DO CORS DO DRIVE ============
 function fixDriveUrl(url) {
   if (!url) return url;
-  // O Google Drive bloqueia CORS. O Googleusercontent permite exibir em sites.
   if (url.includes('drive.google.com')) {
     const match = url.match(/id=([a-zA-Z0-9_-]+)/) || url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-    if (match && match[1]) {
-      return `https://lh3.googleusercontent.com/d/${match[1]}`;
-    }
+    if (match && match[1]) return `https://lh3.googleusercontent.com/d/${match[1]}`;
   }
   return url;
 }
@@ -43,77 +44,76 @@ async function loadTexture(url, fallbackColor) {
   const finalUrl = fixDriveUrl(url);
   if (!finalUrl) {
     const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 512;
-    const ctx = canvas.getContext('2d'); ctx.fillStyle = fallbackColor || '#333'; ctx.fillRect(0,0,512,512);
-    return new THREE.CanvasTexture(canvas);
+    const ctx = canvas.getContext('2d'); ctx.fillStyle = fallbackColor || '#333'; ctx.fillRect(0, 0, 512, 512);
+    const t = new THREE.CanvasTexture(canvas);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.flipY = false;
+    return t;
   }
   return new Promise(resolve => {
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin('anonymous');
-    loader.load(finalUrl, 
-      t => { t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; resolve(t); }, 
-      undefined, 
+    loader.load(
+      finalUrl,
+      t => { t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; resolve(t); },
+      undefined,
       () => resolve(loadTexture(null, fallbackColor))
     );
   });
 }
 window.__loadTexture = loadTexture;
 
-let gltfCache = null;
-async function loadAvatarModel() {
-  if (gltfCache) return gltfCache;
-  const loader = new GLTFLoader();
-  return new Promise((resolve, reject) => {
-    // Ao carregar, removemos o erro de texturas não encontradas
-    loader.load('./camisa.glb', (gltf) => { 
-      gltfCache = gltf.scene; 
-      resolve(gltfCache); 
-    }, undefined, reject);
+// ============ CARREGAR O GLB (uma única vez) ============
+// O seu GLB referencia PNGs externos ("Tshirt and Jeans_diffuse_100X.png") que não existem
+// no servidor (erro 404). Trocamos essas requisições por um pixel branco, assim o modelo
+// carrega sem erros e o manequim/calça ficam com o tom claro do print de referência.
+const WHITE_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+let gltfPromise = null;
+function loadAvatarModel() {
+  if (gltfPromise) return gltfPromise;
+  const manager = new THREE.LoadingManager();
+  manager.setURLModifier(url => (/\.(png|jpe?g)$/i.test(url.split('?')[0]) && !url.startsWith('data:') && !url.startsWith('blob:')) ? WHITE_PIXEL : url);
+  const loader = new GLTFLoader(manager);
+  gltfPromise = new Promise((resolve, reject) => {
+    loader.load('./camisa.glb', gltf => resolve(gltf.scene), undefined, reject);
   });
+  return gltfPromise;
 }
 
-// ============ APLICAR TEXTURA E CORRIGIR ERROS ============
+// ============ APLICAR COR / ESTAMPA NA CAMISETA ============
+// Peças da camisa no seu GLB: Body_Front, Body_Back, Sleeves (x2), Ribbing (x2)
+//  - Body_Front  -> estampa da frente
+//  - Body_Back   -> estampa das costas
+//  - Sleeves / Ribbing -> só a cor base (o UV delas é diferente do corpo, estampar aqui distorce)
 function applyTshirtTexture(root, frontTex, backTex, baseColor, scale = 1.0, offsetX = 0, offsetY = 0) {
-  root.traverse((child) => {
-    if (child.isMesh) {
-      const nome = child.name.toLowerCase();
-      const isFront = nome.includes('body_front') || nome.includes('sleeves') || nome.includes('ribbing');
-      const isBack = nome.includes('body_back');
-      const isBody = nome.includes('body'); // Resto do corpo
-      const isPants = nome.includes('jeans') || nome.includes('pants');
+  root.traverse(child => {
+    if (!child.isMesh) return;
+    const nome = child.name.toLowerCase();
+    const isFront = nome.includes('body_front');
+    const isBack = nome.includes('body_back');
+    const isTrim = nome.includes('sleeves') || nome.includes('ribbing');
+    if (!(isFront || isBack || isTrim)) return;
 
-      // 1. Corrige erro 404 das texturas do GLB
-      if (child.material) {
-        if (Array.isArray(child.material)) {
-          child.material.forEach(m => { if(m.map) m.map = null; });
-        } else {
-          child.material.map = null;
-        }
+    const mats = Array.isArray(child.material) ? child.material : [child.material];
+    mats.forEach(mat => {
+      mat.metalness = 0.0;
+      mat.roughness = 0.8;
+      mat.side = THREE.DoubleSide;
+
+      const tex = isFront ? frontTex : isBack ? (backTex || frontTex) : null;
+      if (tex) {
+        tex.center.set(0.5, 0.5);
+        tex.repeat.set(scale, scale);
+        tex.offset.set(offsetX, offsetY);
+        mat.map = tex;
+        mat.color.setHex(0xffffff);
+      } else {
+        mat.map = null;
+        mat.color.set(baseColor || 0xffffff);
       }
-
-      // 2. Aplica Cor Base se não houver textura customizada
-      if (isFront || isBack) {
-        child.material = child.material.clone();
-        child.material.color.set(baseColor || 0xffffff);
-        child.material.metalness = 0.0;
-        child.material.roughness = 0.8;
-
-        const tex = isBack && backTex ? backTex : frontTex;
-        
-        if (tex) {
-          tex.center.set(0.5, 0.5);
-          tex.repeat.set(scale, scale);
-          tex.offset.set(offsetX, offsetY);
-          child.material.map = tex;
-          child.material.color.setHex(0xffffff); // Se tem textura, cor branca
-        }
-        child.material.needsUpdate = true;
-      } 
-      else if (isBody || isPants) {
-        // Mantém o corpo e a calça, mas limpa possíveis texturas quebradas
-        child.material = child.material.clone();
-        child.material.needsUpdate = true;
-      }
-    }
+      mat.needsUpdate = true;
+    });
   });
 }
 
@@ -123,11 +123,11 @@ async function createViewer(el, cam, options = {}) {
   const h = el.clientHeight || 400;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x151515); 
-  const camera = new THREE.PerspectiveCamera(45, w/h, 0.1, 1000);
+  scene.background = new THREE.Color(0x151515);
+  const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 1000);
   camera.position.set(0, 1.2, 3.5);
 
-  const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -141,43 +141,36 @@ async function createViewer(el, cam, options = {}) {
 
   try {
     const originalModel = await loadAvatarModel();
-    const model = originalModel.clone(true);
-    
-    // Limpeza cirúrgica de caixas brancas
-    const toRemove = [];
-    model.traverse((child) => {
-      if (child.isMesh) {
-        const nome = child.name.toLowerCase();
-        const keep = nome.includes('body') || nome.includes('shirt') || nome.includes('sleeves') || nome.includes('jeans') || nome.includes('pants') || nome.includes('ribbing');
-        if (!keep) toRemove.push(child);
-      }
-    });
-    toRemove.forEach(m => { m.visible = false; if(m.parent) m.parent.remove(m); });
 
-    // Reset matemático
-    model.position.set(0, 0, 0);
-    model.rotation.set(0, 0, 0);
-    model.scale.set(1, 1, 1);
+    // ✅ clone que preserva esqueleto (manequim, cabelo, olhos, tênis são SkinnedMesh)
+    const model = cloneSkinned(originalModel);
+
+    model.traverse(child => {
+      if (!child.isMesh) return;
+      child.frustumCulled = false; // evita sumir/piscar em malhas com esqueleto
+      // Materiais próprios por viewer (hero, cards e modal não se afetam)
+      child.material = Array.isArray(child.material)
+        ? child.material.map(m => m.clone())
+        : child.material.clone();
+    });
+
     model.updateMatrixWorld(true);
 
-    // Medir e reposicionar
+    // Medir e reposicionar (sem resetar escala/rotação do modelo)
     const box = new THREE.Box3().setFromObject(model);
-    const sizeY = box.max.y - box.min.y;
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
     const targetHeight = 2.0;
-    const scaleFactor = sizeY > 0.1 ? (targetHeight / sizeY) : 1;
-    
+    const scaleFactor = size.y > 0.0001 ? targetHeight / size.y : 1;
+
     const wrapper = new THREE.Group();
     wrapper.add(model);
     wrapper.scale.setScalar(scaleFactor);
-    wrapper.position.y = -(box.min.y * scaleFactor);
-    wrapper.position.x = -(box.getCenter(new THREE.Vector3()).x * scaleFactor);
-    wrapper.position.z = -(box.getCenter(new THREE.Vector3()).z * scaleFactor);
+    wrapper.position.set(-center.x * scaleFactor, -box.min.y * scaleFactor, -center.z * scaleFactor);
 
-    // Carrega texturas
+    // Texturas
     const frontTex = await loadTexture(cam.textura_principal, cam.cor_base);
     const backTex = await loadTexture(cam.textura_costas, cam.cor_base);
-    
-    // Aplica texturas e conserta erros 404
     applyTshirtTexture(model, frontTex, backTex, cam.cor_base, cam.textura_escala || 1, cam.textura_offset_x || 0, cam.textura_offset_y || 0);
 
     scene.add(wrapper);
@@ -185,9 +178,9 @@ async function createViewer(el, cam, options = {}) {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-    controls.target.set(0, 1.0, 0); 
-    controls.minDistance = 0.1; 
-    controls.maxDistance = Infinity; 
+    controls.target.set(0, 1.0, 0);
+    controls.minDistance = 0.1;
+    controls.maxDistance = Infinity;
     controls.enablePan = false;
     controls.autoRotate = options.autoRotate !== false;
     controls.autoRotateSpeed = 1.5;
@@ -208,7 +201,7 @@ async function createViewer(el, cam, options = {}) {
     const ro = new ResizeObserver(() => {
       const w2 = el.clientWidth, h2 = el.clientHeight;
       if (!w2 || !h2) return;
-      camera.aspect = w2/h2; camera.updateProjectionMatrix(); renderer.setSize(w2, h2);
+      camera.aspect = w2 / h2; camera.updateProjectionMatrix(); renderer.setSize(w2, h2);
     });
     ro.observe(el);
 
@@ -223,7 +216,7 @@ async function createViewer(el, cam, options = {}) {
         controls.target.set(0, 1.0, 0);
         controls.update();
       },
-      destroy() { cancelAnimationFrame(animId); ro.disconnect(); renderer.dispose(); el.innerHTML = ''; }
+      destroy() { cancelAnimationFrame(animId); ro.disconnect(); controls.dispose(); renderer.dispose(); el.innerHTML = ''; }
     };
 
   } catch (error) {
