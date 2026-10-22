@@ -3,10 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="description" content="Apresentação 3D interativa da coleção de camisetas. Gire, aproxime e explore cada detalhe." />
 <title>Elegance Wear — Apresentação 3D</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <script type="importmap">
@@ -20,7 +17,6 @@
 </head>
 <body>
 
-<!-- ================= HEADER ================= -->
 <header class="header" id="header">
   <div class="container header-inner">
     <a href="#" class="logo" id="siteLogo">ELEGANCE<span>·</span>WEAR</a>
@@ -29,13 +25,10 @@
       <a href="#showcase">Coleção 3D</a>
       <a href="#sobre">Sobre</a>
     </nav>
-    <button class="menu-toggle" id="menuToggle" aria-label="Abrir menu">
-      <span></span><span></span><span></span>
-    </button>
+    <button class="menu-toggle" id="menuToggle"><span></span><span></span><span></span></button>
   </div>
 </header>
 
-<!-- ================= HERO ================= -->
 <section class="hero" id="hero">
   <div class="container hero-inner">
     <div class="hero-text">
@@ -43,67 +36,34 @@
       <h1 id="heroTitle">ELEGANCE WEAR</h1>
       <p id="heroSub">Apresentação 3D da coleção 2026. Gire, aproxime e explore cada detalhe.</p>
       <a href="#showcase" class="btn-primary" id="heroCta">Ver Coleção 3D</a>
-      <div class="hero-hint">
-        <span>🖱️ Arraste para girar</span>
-        <span>🔍 Scroll para zoom</span>
-        <span>👆 Pinça no celular</span>
-      </div>
     </div>
     <div class="hero-canvas-wrap">
       <div id="heroViewer" class="viewer"></div>
       <div class="viewer-badge">Manequim 3D interativo</div>
     </div>
   </div>
-  <div class="scroll-hint">⌄</div>
 </section>
 
-<!-- ================= SHOWCASE ================= -->
 <section class="showcase" id="showcase">
   <div class="container">
     <div class="section-head">
       <span class="eyebrow">APRESENTAÇÃO</span>
       <h2>Explore os 3 modelos</h2>
-      <p>Clique em "Explorar em 3D" para interagir com o manequim.</p>
     </div>
-    <div class="products-grid" id="productsGrid">
-      <!-- preenchido via JS -->
-    </div>
+    <div class="products-grid" id="productsGrid"></div>
   </div>
 </section>
 
-<!-- ================= SOBRE ================= -->
-<section class="sobre" id="sobre">
-  <div class="container sobre-inner">
-    <div class="sobre-text">
-      <span class="eyebrow">SOBRE A COLEÇÃO</span>
-      <h2>Apresentação visual em tempo real</h2>
-      <p>Uma vitrine 3D interativa para apresentar cada peça: você pode girar o manequim, aproximar para ver detalhes das texturas e avaliar a modelagem antes de conhecer pessoalmente.</p>
-      <ul class="features">
-        <li>✦ Manequim 3D real com geometria de corpo humano</li>
-        <li>✦ Rotação, zoom e pan interativos</li>
-        <li>✦ Texturas trocadas dinamicamente</li>
-      </ul>
-    </div>
-    <div class="sobre-visual">
-      <div class="stat-card"><strong>3D</strong><span>Manequins interativos</span></div>
-      <div class="stat-card"><strong>360°</strong><span>Rotação livre</span></div>
-      <div class="stat-card"><strong>HD</strong><span>Texturas em alta resolução</span></div>
-    </div>
-  </div>
-</section>
-
-<!-- ================= FOOTER ================= -->
 <footer class="footer">
   <div class="container footer-inner">
     <div>
-      <p id="footerText">© 2026 Elegance Wear. Apresentação de coleção.</p>
+      <p id="footerText">© 2026 Elegance Wear.</p>
       <p class="socials" id="socials"></p>
     </div>
-    <button class="lock-btn" id="lockBtn" title="Painel Admin" aria-label="Painel Admin">🔒</button>
+    <button class="lock-btn" id="lockBtn">🔒</button>
   </div>
 </footer>
 
-<!-- ================= VIEWER MODAL (FULLSCREEN) ================= -->
 <div class="viewer-modal" id="viewerModal">
   <div class="viewer-modal-header">
     <div>
@@ -114,23 +74,20 @@
   </div>
   <div class="viewer-modal-body">
     <div id="fullViewer" class="viewer full"></div>
-    
-    <!-- CONTROLES DO MODAL (INCLUINDO ZOOM) -->
     <div class="viewer-controls">
-      <button class="btn-ghost" id="zoomOut" title="Afastar">➖ Zoom</button>
+      <button class="btn-ghost" id="zoomOut">➖ Zoom</button>
       <button class="btn-ghost" id="resetView">Resetar câmera</button>
       <button class="btn-ghost" id="toggleAuto" data-paused="0">Pausar rotação</button>
-      <button class="btn-ghost" id="zoomIn" title="Aproximar">➕ Zoom</button>
+      <button class="btn-ghost" id="zoomIn">➕ Zoom</button>
     </div>
   </div>
 </div>
 
-<!-- ================= LOGIN MODAL ================= -->
 <div class="modal" id="loginModal">
   <div class="modal-card">
     <h3>Painel Administrativo</h3>
     <p>Digite a senha de acesso.</p>
-    <input type="password" id="senhaInput" placeholder="Senha" autocomplete="off">
+    <input type="password" id="senhaInput" placeholder="Senha">
     <div class="modal-actions">
       <button class="btn-ghost" data-close>Cancelar</button>
       <button class="btn-primary" id="loginBtn">Entrar</button>
@@ -139,7 +96,6 @@
   </div>
 </div>
 
-<!-- ================= ADMIN PANEL ================= -->
 <div class="admin-panel" id="adminPanel">
   <div class="admin-header">
     <h2>🎛️ Painel Administrativo</h2>
