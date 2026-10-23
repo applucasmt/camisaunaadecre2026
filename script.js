@@ -148,7 +148,7 @@ async function loadTexture(url, fallbackColor) {
 window.__loadTexture = loadTexture;
 
 // ==========================================
-// MODELO 3D E APLICAÇÃO DE TEXTURA
+// MODELO 3D
 // ==========================================
 const WHITE_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 let gltfPromise = null;
@@ -323,7 +323,7 @@ async function buildMannequin(cam) {
 }
 
 // ==========================================
-// INICIALIZAÇÃO E SCROLLTELLING
+// INICIALIZAÇÃO
 // ==========================================
 async function initApp(loader) {
   const data = await apiGet('getAll');
@@ -333,7 +333,6 @@ async function initApp(loader) {
     state.config = Object.fromEntries(data.config.map(c => [c.CHAVE, c.VALOR]));
     state.camisetas = data.camisetas;
     
-    // Injeta as artes no HTML
     for (let i = 0; i < 3; i++) {
       if(state.camisetas[i]) { 
         const el = document.getElementById(`nome-${i+1}`); if(el) el.textContent = state.camisetas[i].nome; 
@@ -345,7 +344,6 @@ async function initApp(loader) {
         
         if(container && imgArteF && imgArteV) {
           if(state.camisetas[i].arte_frente || state.camisetas[i].arte_verso) {
-            // Não força o display:flex aqui, deixa o GSAP controlar a opacidade
             container.style.display = 'flex';
             if(state.camisetas[i].arte_frente) imgArteF.src = fixDriveUrl(state.camisetas[i].arte_frente);
             if(state.camisetas[i].arte_verso) imgArteV.src = fixDriveUrl(state.camisetas[i].arte_verso);
@@ -415,7 +413,7 @@ async function initApp(loader) {
   if (window.gsap && window.ScrollTrigger) {
     gsap.registerPlugin(ScrollTrigger);
 
-    // 1. Movimento da câmera (Foco)
+    // Movimento da câmera
     ScrollTrigger.create({ trigger: "#s2", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
       const p = self.progress;
       camState.z = THREE.MathUtils.lerp(3.8, 2.0, p); 
@@ -423,38 +421,37 @@ async function initApp(loader) {
       lookState.y = THREE.MathUtils.lerp(1.0, 1.3, p); 
     }});
 
-    // 2. Rotação do Modelo 1 e animação das Artes
+    // Rotação do Modelo 1 e animação das artes 1
     ScrollTrigger.create({ trigger: "#s3", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
       modelsData[0].spinner.rotation.y = THREE.MathUtils.lerp(0, Math.PI, self.progress);
       
-      // Animação Suave da Arte do Modelo 1
       const artes1 = document.getElementById('arteContainer-1');
       if(artes1) {
-        artes1.style.opacity = self.progress > 0.2 ? Math.min(1, (self.progress - 0.2) * 2) : 0;
-        artes1.style.transform = `translateY(-50%) translateX(${(1 - self.progress) * -50}px)`;
+        // A arte aparece e desliza conforme a rolagem
+        artes1.style.opacity = Math.max(0, Math.min(1, self.progress * 2));
+        artes1.style.transform = `translateY(0px)`;
       }
     }});
 
-    // 3. Troca para o Modelo 2
+    // Troca para o Modelo 2
     ScrollTrigger.create({ trigger: "#s4", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
       const p = self.progress;
       modelsData[0].wrapper.position.x = THREE.MathUtils.lerp(0, spacing, p);
       if(modelsData[1]) modelsData[1].wrapper.position.x = THREE.MathUtils.lerp(spacing, 0, p);
       modelsData[0].spinner.rotation.y = THREE.MathUtils.lerp(Math.PI, 0, p);
       
-      // Some com a arte 1, aparece a arte 2
       const artes1 = document.getElementById('arteContainer-1');
       const artes2 = document.getElementById('arteContainer-2');
       if(artes1) artes1.style.opacity = 1 - p;
       if(artes2) artes2.style.opacity = p;
     }});
 
-    // 4. Rotação do Modelo 2 e animação da Arte 2
+    // Rotação do Modelo 2
     ScrollTrigger.create({ trigger: "#s5", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
       if(modelsData[1]) modelsData[1].spinner.rotation.y = THREE.MathUtils.lerp(0, Math.PI, self.progress);
     }});
 
-    // 5. Troca para o Modelo 3
+    // Troca para o Modelo 3
     ScrollTrigger.create({ trigger: "#s6", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
       const p = self.progress;
       if(modelsData[1]) modelsData[1].wrapper.position.x = THREE.MathUtils.lerp(0, spacing, p);
@@ -467,12 +464,10 @@ async function initApp(loader) {
       if(artes3) artes3.style.opacity = p;
     }});
 
-    // 6. Rotação do Modelo 3
     ScrollTrigger.create({ trigger: "#s7", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
       if(modelsData[2]) modelsData[2].spinner.rotation.y = THREE.MathUtils.lerp(0, Math.PI, self.progress);
     }});
 
-    // Fade in dos textos
     gsap.utils.toArray('.content-box').forEach(box => {
       ScrollTrigger.create({
         trigger: box, start: "top 80%",
@@ -509,7 +504,7 @@ async function initApp(loader) {
 }
 
 // ==========================================
-// PAINEL ADMINISTRATIVO (MANTIDO)
+// PAINEL ADMINISTRATIVO
 // ==========================================
 function initAdminPanel() {
   const lockBtn = document.getElementById('lockBtn');
@@ -735,7 +730,6 @@ function initAdminPanel() {
     initAdminPreview(c).then(() => {
       if(!state.adminViewer) return;
 
-      // Atualiza as artes visuais laterais
       const updateArteVisual = () => {
         const urlF = document.getElementById('urlArteFrente').value;
         const urlV = document.getElementById('urlArteVerso').value;
