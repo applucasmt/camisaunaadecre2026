@@ -133,43 +133,75 @@ function applyTshirtTexture(root, textures, configs, corBase) {
 }
 
 // ==========================================
-// CORREÇÃO: SEPARAÇÃO RIGOROSA DE CORPO E CALÇA
+// CORES DO MANEQUIM (cada parte é independente)
 // ==========================================
+// No camisa.glb o "body" é UMA malha com 4 materiais (face, body2, arm, leg),
+// os olhos/cílios/dentes são malhas separadas e a calça são malhas "HP1-*",
+// "Pattern2D_*" e "MatShape_*" (material Denim). Por isso a identificação
+// é feita pelo NOME DO MATERIAL e pelo nome da malha.
+const COR_PADRAO = {
+  corpo: '#e0e0e0', cabelo: '#333333', calca: '#1a1a1a', sapato: '#ffffff', olhos: '#ffffff'
+};
+
+function isShirtMesh(nome) {
+  return nome.includes('body_front') || nome.includes('body_back') ||
+         nome.includes('sleeves') || nome.includes('ribbing') || nome.includes('gola');
+}
+
+// Retorna a "parte" do manequim a que um material/malha pertence
+function classifyPart(meshName, matName) {
+  if (isShirtMesh(meshName)) return 'camiseta';            // controlada por applyTshirtTexture
+  if (meshName.includes('stitch')) return 'costura';        // mantém a cor original da costura
+  if (matName.includes('eyelash') || meshName.includes('eyelash')) return 'cilios';
+  if (matName === 'eye' || meshName.startsWith('eye')) return 'olhos';
+  if (matName.includes('tooth') || meshName.includes('tooth')) return 'dentes';
+  if (meshName.includes('shoe') || matName.includes('sneaker') || matName.includes('shoe')) return 'sapato';
+  if (meshName.includes('hair') || meshName.includes('cabelo') || matName === 'defaultmat1') return 'cabelo';
+  if (matName.includes('denim') || matName === 'material744700' ||
+      meshName.startsWith('hp1') || meshName.startsWith('pattern2d') || meshName.startsWith('matshape') ||
+      meshName.includes('jeans') || meshName.includes('pants') || meshName.includes('calca')) return 'calca';
+  if (['face', 'body2', 'arm', 'leg'].includes(matName) || meshName.startsWith('body')) return 'corpo';
+  return null; // desconhecido: não mexe
+}
+
 function applyMannequinColors(root, colors) {
+  const c = Object.assign({}, COR_PADRAO, colors);
+
+  // cor e acabamento de cada parte
+  const parts = {
+    corpo:  { cor: c.corpo,  rough: 0.7,  metal: 0.1 },
+    cabelo: { cor: c.cabelo, rough: 0.7,  metal: 0.1 },
+    calca:  { cor: c.calca,  rough: 0.9,  metal: 0.0 },
+    sapato: { cor: c.sapato, rough: 0.7,  metal: 0.1 },
+    olhos:  { cor: c.olhos,  rough: 0.15, metal: 0.0 },
+    cilios: { cor: c.cabelo, rough: 0.8,  metal: 0.0 },
+    dentes: { cor: '#ffffff', rough: 0.5, metal: 0.0 }
+  };
+
+  const colorMgmt = !!(THREE.ColorManagement && THREE.ColorManagement.enabled);
+
   root.traverse(child => {
     if (!child.isMesh) return;
-    const nome = child.name.toLowerCase();
-    
-    // Ignora a camiseta
-    const isShirt = nome.includes('body_front') || nome.includes('body_back') || 
-                    nome.includes('sleeves') || nome.includes('ribbing') || nome.includes('gola');
-    if (isShirt) return;
+    const meshName = child.name.toLowerCase();
+    const mats = Array.isArray(child.material) ? child.material : [child.material];
 
-    let colorHex = colors.corpo || '#e0e0e0';
+    mats.forEach(mat => {
+      const matName = (mat.name || '').toLowerCase();
+      const parte = classifyPart(meshName, matName);
+      const cfg = parte && parts[parte];
+      if (!cfg) return; // camiseta, costura ou desconhecido
 
-    // Identifica calça e sapato ANTES de checar o corpo
-    if (nome.includes('jeans') || nome.includes('pants') || nome.includes('calca') || 
-        nome.includes('thigh') || nome.includes('shin') || nome.includes('hip')) {
-      colorHex = colors.calca || '#1a1a1a';
-    } 
-    else if (nome.includes('shoe') || nome.includes('tenis') || nome.includes('sapato') || nome.includes('foot')) {
-      colorHex = colors.sapato || '#ffffff';
-    }
-    else if (nome.includes('hair') || nome.includes('cabelo') || nome.includes('head')) {
-      colorHex = colors.cabelo || '#333333';
-    }
-
-    if (colorHex) {
-      const mats = Array.isArray(child.material) ? child.material : [child.material];
-      mats.forEach(mat => { 
-        if (mat.color) mat.color.set(colorHex).convertSRGBToLinear(); 
-        mat.map = null; 
-        mat.vertexColors = false;
-        mat.metalness = 0.1; 
-        mat.roughness = 0.7;
-        mat.needsUpdate = true; 
-      });
-    }
+      if (mat.color) {
+        mat.color.set(cfg.cor);
+        // só converte manualmente se o three.js não faz o gerenciamento de cor sozinho
+        if (!colorMgmt) mat.color.convertSRGBToLinear();
+      }
+      mat.map = null;
+      mat.vertexColors = false;
+      mat.metalness = cfg.metal;
+      mat.roughness = cfg.rough;
+      mat.needsUpdate = true;
+    });
   });
 }
 
@@ -220,7 +252,8 @@ async function buildMannequin(cam) {
     corpo: cam.cor_corpo || '#e0e0e0',
     cabelo: cam.cor_cabelo || '#333333',
     calca: cam.cor_calca || '#1a1a1a',
-    sapato: cam.cor_sapato || '#ffffff'
+    sapato: cam.cor_sapato || '#ffffff',
+    olhos: cam.cor_olho || '#ffffff'
   };
 
   applyTshirtTexture(model, textures, configs, cam.cor_base);
@@ -502,6 +535,7 @@ function initAdminPanel() {
     const cCabelo = c.cor_cabelo || '#333333';
     const cCalca = c.cor_calca || '#1a1a1a';
     const cSapato = c.cor_sapato || '#ffffff';
+    const cOlhos = c.cor_olho || '#ffffff';
 
     content.innerHTML = `
       <h2>Configurar: ${c.nome}</h2>
@@ -546,11 +580,12 @@ function initAdminPanel() {
 
           <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
             <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Cores do Manequim</h3>
-            <div style="display:flex; gap:8px; margin-bottom:8px;">
+            <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:8px;">
               <div style="flex:1"><label>Corpo</label><input type="color" id="corCorpo" value="${cCorpo}" style="height:40px; padding:4px; cursor:pointer; width:100%"></div>
               <div style="flex:1"><label>Cabelo</label><input type="color" id="corCabelo" value="${cCabelo}" style="height:40px; padding:4px; cursor:pointer; width:100%"></div>
               <div style="flex:1"><label>Calça</label><input type="color" id="corCalca" value="${cCalca}" style="height:40px; padding:4px; cursor:pointer; width:100%"></div>
               <div style="flex:1"><label>Sapato</label><input type="color" id="corSapato" value="${cSapato}" style="height:40px; padding:4px; cursor:pointer; width:100%"></div>
+              <div style="flex:1"><label>Olhos</label><input type="color" id="corOlhos" value="${cOlhos}" style="height:40px; padding:4px; cursor:pointer; width:100%"></div>
             </div>
             <div><label>Cor Base (Fundo)</label><input type="color" id="corBase" value="${cBase}" style="height:40px; padding:4px; cursor:pointer; width:100%"></div>
           </div>
@@ -573,13 +608,14 @@ function initAdminPanel() {
     initAdminPreview(c).then(() => {
       if(!state.adminViewer) return;
 
-      ['corCorpo', 'corCabelo', 'corCalca', 'corSapato'].forEach(id => {
+      ['corCorpo', 'corCabelo', 'corCalca', 'corSapato', 'corOlhos'].forEach(id => {
         document.getElementById(id).oninput = () => {
           state.adminViewer.setColors({
             corpo: document.getElementById('corCorpo').value,
             cabelo: document.getElementById('corCabelo').value,
             calca: document.getElementById('corCalca').value,
-            sapato: document.getElementById('corSapato').value
+            sapato: document.getElementById('corSapato').value,
+            olhos: document.getElementById('corOlhos').value
           });
         };
       });
@@ -656,6 +692,7 @@ function initAdminPanel() {
           cor_cabelo: document.getElementById('corCabelo').value,
           cor_calca: document.getElementById('corCalca').value,
           cor_sapato: document.getElementById('corSapato').value,
+          cor_olho: document.getElementById('corOlhos').value,
           cor_base: document.getElementById('corBase').value
         };
         const r = await apiPost({ action:'updateCamiseta', senha: state.config.admin_senha || '20266', id: c.id, dados });
