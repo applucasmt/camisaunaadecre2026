@@ -20,7 +20,6 @@ function initLoadingScreen() {
   const w = container.clientWidth || 300;
   const h = container.clientHeight || 300;
 
-  // Setup Three.js para a Orbe
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
   camera.position.z = 4;
@@ -30,7 +29,6 @@ function initLoadingScreen() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   container.appendChild(renderer.domElement);
 
-  // Partículas (Neural)
   const particleCount = 300;
   const geometry = new THREE.BufferGeometry();
   const positions = new Float32Array(particleCount * 3);
@@ -51,7 +49,6 @@ function initLoadingScreen() {
   const particles = new THREE.Points(geometry, material);
   scene.add(particles);
 
-  // Núcleo (Orbe)
   const coreGeo = new THREE.IcosahedronGeometry(1, 3);
   const coreMat = new THREE.MeshBasicMaterial({ 
     color: 0xd4af37, 
@@ -62,26 +59,21 @@ function initLoadingScreen() {
   const core = new THREE.Mesh(coreGeo, coreMat);
   scene.add(core);
 
-  // Animação da Orbe
-  let progressSpeed = 0.01;
   let currentProgress = 0;
   let targetProgress = 0;
 
   function animateOrb() {
     requestAnimationFrame(animateOrb);
     
-    // Rotação contínua
     particles.rotation.x -= 0.002;
     particles.rotation.y += 0.003;
     core.rotation.x += 0.005;
     core.rotation.y -= 0.005;
 
-    // Pulsação baseada no progresso
     currentProgress += (targetProgress - currentProgress) * 0.05;
     const pulse = 1 + Math.sin(Date.now() * 0.005) * 0.05 + (currentProgress * 0.5);
     core.scale.set(pulse, pulse, pulse);
 
-    // Atualiza a barra de UI
     const p = Math.min(100, Math.floor(currentProgress * 100));
     if (barFill) barFill.style.width = `${p}%`;
     if (percentText) percentText.textContent = `${p}%`;
@@ -350,22 +342,29 @@ async function buildMannequin(cam) {
 // ==========================================
 async function initApp(loader) {
   const data = await apiGet('getAll');
-  loader.setProgress(0.3); // 30% - Dados da API carregados
+  loader.setProgress(0.3);
 
   if (data.ok) {
     state.config = Object.fromEntries(data.config.map(c => [c.CHAVE, c.VALOR]));
     state.camisetas = data.camisetas;
-    if(state.camisetas[0]) { 
-      const el1 = document.getElementById('nome-1'); if(el1) el1.textContent = state.camisetas[0].nome; 
-      const ed1 = document.getElementById('desc-1'); if(ed1) ed1.textContent = state.camisetas[0].descricao; 
-    }
-    if(state.camisetas[1]) { 
-      const el2 = document.getElementById('nome-2'); if(el2) el2.textContent = state.camisetas[1].nome; 
-      const ed2 = document.getElementById('desc-2'); if(ed2) ed2.textContent = state.camisetas[1].descricao; 
-    }
-    if(state.camisetas[2]) { 
-      const el3 = document.getElementById('nome-3'); if(el3) el3.textContent = state.camisetas[2].nome; 
-      const ed3 = document.getElementById('desc-3'); if(ed3) ed3.textContent = state.camisetas[2].descricao; 
+    
+    // Lógica para atualizar textos e exibir artes no site
+    for (let i = 0; i < 3; i++) {
+      if(state.camisetas[i]) { 
+        const el = document.getElementById(`nome-${i+1}`); if(el) el.textContent = state.camisetas[i].nome; 
+        const ed = document.getElementById(`desc-${i+1}`); if(ed) ed.textContent = state.camisetas[i].descricao; 
+        
+        const imgArteF = document.getElementById(`arteFrenteSite-${i+1}`);
+        const imgArteV = document.getElementById(`arteVersoSite-${i+1}`);
+        if(imgArteF && state.camisetas[i].arte_frente) {
+          imgArteF.src = state.camisetas[i].arte_frente;
+          imgArteF.style.display = 'block';
+        }
+        if(imgArteV && state.camisetas[i].arte_verso) {
+          imgArteV.src = state.camisetas[i].arte_verso;
+          imgArteV.style.display = 'block';
+        }
+      }
     }
   } else {
     state.camisetas = [
@@ -375,7 +374,7 @@ async function initApp(loader) {
     ];
   }
   
-  loader.setProgress(0.5); // 50% - Textos prontos
+  loader.setProgress(0.5);
 
   const container = document.getElementById('webgl-container');
   const scene = new THREE.Scene();
@@ -412,7 +411,6 @@ async function initApp(loader) {
     scene.add(wrapper);
     modelsData.push({ wrapper, spinner, index: i });
     
-    // Atualiza a barra conforme os modelos carregam (50% a 90%)
     loader.setProgress(0.5 + ((i + 1) / totalModels) * 0.4);
   }
 
@@ -493,9 +491,9 @@ async function initApp(loader) {
     if (window.ScrollTrigger) ScrollTrigger.refresh();
   });
 
-  loader.setProgress(0.95); // 95% - Tudo pronto
+  loader.setProgress(0.95);
   initAdminPanel();
-  loader.finish(); // Fecha a tela
+  loader.finish();
 }
 
 // ==========================================
@@ -647,13 +645,13 @@ function initAdminPanel() {
         <div class="admin-form">
           
           <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
-            <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Frente</h3>
+            <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Frente da Camisa</h3>
             <div><label>URL / Base64</label><input type="text" id="urlFrente" value="${c.textura_principal || ''}"></div>
             <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileFrente" accept="image/*"></div>
           </div>
 
           <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
-            <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Costas</h3>
+            <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Costas da Camisa</h3>
             <div><label>URL / Base64</label><input type="text" id="urlCostas" value="${c.textura_costas || ''}"></div>
             <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileCostas" accept="image/*"></div>
           </div>
@@ -668,6 +666,25 @@ function initAdminPanel() {
             <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Gola</h3>
             <div><label>URL / Base64</label><input type="text" id="urlGola" value="${c.textura_gola || ''}"></div>
             <div style="margin-top:8px;"><label>Upload Local</label><input type="file" id="fileGola" accept="image/*"></div>
+          </div>
+
+          <!-- NOVA FUNÇÃO: ARTE FRENTE E VERSO PARA EXIBIÇÃO -->
+          <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--accent);">
+            <h3 style="margin-bottom: 12px; font-size: 1rem; color: var(--accent);">Arte de Exibição (Frente e Verso)</h3>
+            <p style="font-size:0.8rem; color:var(--text-dim); margin-bottom:12px;">Essas imagens aparecem ao lado do manequim no site.</p>
+            
+            <div style="display:flex; gap:16px;">
+              <div style="flex:1">
+                <label>Arte Frente</label>
+                <input type="text" id="urlArteFrente" value="${c.arte_frente || ''}">
+                <input type="file" id="fileArteFrente" accept="image/*" style="margin-top:8px;">
+              </div>
+              <div style="flex:1">
+                <label>Arte Verso</label>
+                <input type="text" id="urlArteVerso" value="${c.arte_verso || ''}">
+                <input type="file" id="fileArteVerso" accept="image/*" style="margin-top:8px;">
+              </div>
+            </div>
           </div>
 
           <div style="background: #111; padding: 16px; border-radius: 12px; border: 1px solid var(--border);">
@@ -687,7 +704,13 @@ function initAdminPanel() {
         </div>
 
         <div>
-          <div class="preview-3d" id="adminPreview" style="height: 100%; min-height: 500px; background: #000; border-radius:12px; overflow:hidden;"></div>
+          <div class="preview-3d" id="adminPreview" style="height: 100%; min-height: 500px; background: #000; border-radius:12px; overflow:hidden; position:relative;">
+            <!-- CONTAINER DA ARTE LATERAL NO ADMIN -->
+            <div id="arteLateralContainer" style="position:absolute; left:20px; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:10px; z-index:10; pointer-events:none;">
+              <img id="displayArteFrente" src="" style="max-width:120px; border-radius:8px; border:1px solid var(--border); display:none;">
+              <img id="displayArteVerso" src="" style="max-width:120px; border-radius:8px; border:1px solid var(--border); display:none;">
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -699,6 +722,22 @@ function initAdminPanel() {
 
     initAdminPreview(c).then(() => {
       if(!state.adminViewer) return;
+
+      // Atualiza as artes visuais laterais
+      const updateArteVisual = () => {
+        const urlF = document.getElementById('urlArteFrente').value;
+        const urlV = document.getElementById('urlArteVerso').value;
+        
+        const imgF = document.getElementById('displayArteFrente');
+        const imgV = document.getElementById('displayArteVerso');
+        
+        if (urlF) { imgF.src = urlF; imgF.style.display = 'block'; } else { imgF.style.display = 'none'; }
+        if (urlV) { imgV.src = urlV; imgV.style.display = 'block'; } else { imgV.style.display = 'none'; }
+      };
+
+      updateArteVisual();
+      document.getElementById('urlArteFrente').oninput = updateArteVisual;
+      document.getElementById('urlArteVerso').oninput = updateArteVisual;
 
       ['corCorpo', 'corCabelo', 'corCalca', 'corSapato', 'corOlhos'].forEach(id => {
         document.getElementById(id).oninput = () => {
@@ -727,7 +766,7 @@ function initAdminPanel() {
 
           loadTexture(base64, c.cor_base).then(t => {
             const args = { frente: [t, null, null, null], costas: [null, t, null, null], manga: [null, null, t, null], gola: [null, null, null, t] }[textureKey];
-            state.adminViewer.setTextures(...args, state.adminViewer.getConfigs(), document.getElementById('corBase').value);
+            if(args) state.adminViewer.setTextures(...args, state.adminViewer.getConfigs(), document.getElementById('corBase').value);
           });
 
           toast('Enviando imagem...', false);
@@ -743,6 +782,9 @@ function initAdminPanel() {
 
           if (r.ok) {
             document.getElementById(inputId).value = r.url;
+            if (textureKey === 'arte_frente' || textureKey === 'arte_verso') {
+              updateArteVisual();
+            }
             toast('Imagem salva no Drive!', false);
           } else {
             toast('Erro ao salvar imagem: ' + (r.error || 'Desconhecido'), true);
@@ -754,11 +796,13 @@ function initAdminPanel() {
       document.getElementById('fileCostas').onchange = (e) => handleUpload(e, 'urlCostas', 'costas');
       document.getElementById('fileManga').onchange = (e) => handleUpload(e, 'urlManga', 'manga');
       document.getElementById('fileGola').onchange = (e) => handleUpload(e, 'urlGola', 'gola');
+      document.getElementById('fileArteFrente').onchange = (e) => handleUpload(e, 'urlArteFrente', 'arte_frente');
+      document.getElementById('fileArteVerso').onchange = (e) => handleUpload(e, 'urlArteVerso', 'arte_verso');
 
       const handleUrl = (e, textureKey) => {
         loadTexture(e.target.value, c.cor_base).then(t => {
           const args = { frente: [t, null, null, null], costas: [null, t, null, null], manga: [null, null, t, null], gola: [null, null, null, t] }[textureKey];
-          state.adminViewer.setTextures(...args, state.adminViewer.getConfigs(), document.getElementById('corBase').value);
+          if(args) state.adminViewer.setTextures(...args, state.adminViewer.getConfigs(), document.getElementById('corBase').value);
         });
       };
       document.getElementById('urlFrente').onchange = (e) => handleUrl(e, 'frente');
@@ -777,6 +821,8 @@ function initAdminPanel() {
           textura_costas: document.getElementById('urlCostas').value,
           textura_manga: document.getElementById('urlManga').value,
           textura_gola: document.getElementById('urlGola').value,
+          arte_frente: document.getElementById('urlArteFrente').value,
+          arte_verso: document.getElementById('urlArteVerso').value,
           x_frente: cfgFrente.x, y_frente: cfgFrente.y, scale_frente: cfgFrente.scale,
           x_costas: cfgCostas.x, y_costas: cfgCostas.y, scale_costas: cfgCostas.scale,
           x_manga: cfgManga.x, y_manga: cfgManga.y, scale_manga: cfgManga.scale,
@@ -789,7 +835,7 @@ function initAdminPanel() {
           cor_base: document.getElementById('corBase').value
         };
 
-        ['textura_principal', 'textura_costas', 'textura_manga', 'textura_gola'].forEach(k => {
+        ['textura_principal', 'textura_costas', 'textura_manga', 'textura_gola', 'arte_frente', 'arte_verso'].forEach(k => {
           if (String(dados[k] || '').startsWith('data:')) delete dados[k];
         });
 
@@ -1035,13 +1081,13 @@ function loadGSAP() {
 // INICIA O LOADING SCREEN E DEPOIS O APP
 document.addEventListener('DOMContentLoaded', () => {
   const loader = initLoadingScreen();
-  loader.setProgress(0.1); // 10% (Iniciando dependências)
+  loader.setProgress(0.1);
 
   loadGSAP().then(() => {
-    loader.setProgress(0.25); // 25% (GSAP Pronto)
+    loader.setProgress(0.25);
     initApp(loader);
   }).catch(err => {
     console.error('Erro ao carregar GSAP:', err);
-    initApp(loader); // Inicia o site mesmo sem animação
+    initApp(loader);
   });
 });
