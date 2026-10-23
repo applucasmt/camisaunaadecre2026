@@ -18,6 +18,7 @@
 </head>
 <body>
 
+<!-- TELA DE CARREGAMENTO -->
 <div id="loadingScreen">
   <div id="orb-container"></div>
   <div class="loading-text">
@@ -27,6 +28,28 @@
     </div>
     <p>Iniciando experiência 3D</p>
   </div>
+</div>
+
+<!-- CAMADA FLUTUANTE DAS ARTES -->
+<div id="arteLayer" style="position:fixed; inset:0; z-index:50; pointer-events:none; display:flex; align-items:center; justify-content:space-between; padding: 0 5vw;">
+  <!-- Arte Modelo 1 -->
+  <div id="arteContainer-1" style="display:none; flex-direction:column; gap:20px;">
+    <img id="arteFrenteSite-1" style="max-height:250px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
+    <img id="arteVersoSite-1" style="max-height:250px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
+  </div>
+  
+  <div style="flex:1;"></div>
+
+  <!-- Arte Modelo 3 (Para o layout ficar equilibrado) -->
+  <div id="arteContainer-3" style="display:none; flex-direction:column; gap:20px; align-items:flex-end;">
+    <img id="arteFrenteSite-3" style="max-height:250px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
+    <img id="arteVersoSite-3" style="max-height:250px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
+  </div>
+</div>
+
+<!-- Arte Modelo 2 (Fica escondida pois sobrepõe a 1 no scroll, mas mantemos o ID para não quebrar o script) -->
+<div id="arteContainer-2" style="display:none;">
+  <img id="arteFrenteSite-2"><img id="arteVersoSite-2">
 </div>
 
 <div class="scroll-popup" id="scrollPopup">
@@ -59,11 +82,6 @@
       <h2 id="nome-1">Carregando...</h2>
       <p id="desc-1"></p>
     </div>
-    <!-- EXIBIÇÃO DA ARTE NO SITE (MODELO 1) -->
-    <div id="arteDisplay-1" style="position:absolute; left:5vw; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:20px; z-index:10; pointer-events:none;">
-      <img id="arteFrenteSite-1" src="" style="max-width:180px; border-radius:12px; display:none;">
-      <img id="arteVersoSite-1" src="" style="max-width:180px; border-radius:12px; display:none;">
-    </div>
   </section>
 
   <section class="scroll-section" id="s3">
@@ -79,11 +97,6 @@
       <span class="eyebrow">MODELO 02</span>
       <h2 id="nome-2">Carregando...</h2>
       <p id="desc-2"></p>
-    </div>
-    <!-- EXIBIÇÃO DA ARTE NO SITE (MODELO 2) -->
-    <div id="arteDisplay-2" style="position:absolute; left:5vw; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:20px; z-index:10; pointer-events:none;">
-      <img id="arteFrenteSite-2" src="" style="max-width:180px; border-radius:12px; display:none;">
-      <img id="arteVersoSite-2" src="" style="max-width:180px; border-radius:12px; display:none;">
     </div>
   </section>
 
@@ -101,11 +114,6 @@
       <h2 id="nome-3">Carregando...</h2>
       <p id="desc-3"></p>
     </div>
-    <!-- EXIBIÇÃO DA ARTE NO SITE (MODELO 3) -->
-    <div id="arteDisplay-3" style="position:absolute; left:5vw; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:20px; z-index:10; pointer-events:none;">
-      <img id="arteFrenteSite-3" src="" style="max-width:180px; border-radius:12px; display:none;">
-      <img id="arteVersoSite-3" src="" style="max-width:180px; border-radius:12px; display:none;">
-    </div>
   </section>
 
   <section class="scroll-section" id="s7">
@@ -117,7 +125,7 @@
   </section>
 </div>
 
-<button class="lock-btn" id="lockBtn" title="Painel Admin" aria-label="Painel Admin">🔒</button>
+<button class="lock-btn" id="lockBtn" title="Painel Admin">🔒</button>
 
 <div class="modal" id="loginModal">
   <div class="modal-card">
