@@ -4,9 +4,103 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbyMiP-nbR9_UYZGCA7dtAWIm4HIl2Vg4UeatogPC9f7ORdEZMSEJwU6LggDenh0eqDVug/exec';
-const state = { config: {}, camisetas: [], modalViewer: null, isAdminLogado: false, adminViewer: null };
+const state = { config: {}, camisetas: [], modalViewer: null, isAdminLogado: false, adminViewer: null, isLoaded: false };
 window.__state = state;
 window.THREE = THREE;
+
+// ==========================================
+// TELA DE CARREGAMENTO (ORBE NEURAL 3D)
+// ==========================================
+function initLoadingScreen() {
+  const container = document.getElementById('orb-container');
+  const barFill = document.getElementById('loadingBarFill');
+  const percentText = document.getElementById('loadingPercent');
+  const screen = document.getElementById('loadingScreen');
+
+  const w = container.clientWidth || 300;
+  const h = container.clientHeight || 300;
+
+  // Setup Three.js para a Orbe
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
+  camera.position.z = 4;
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(w, h);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  container.appendChild(renderer.domElement);
+
+  // Partículas (Neural)
+  const particleCount = 300;
+  const geometry = new THREE.BufferGeometry();
+  const positions = new Float32Array(particleCount * 3);
+  
+  for (let i = 0; i < particleCount * 3; i++) {
+    positions[i] = (Math.random() - 0.5) * 3;
+  }
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+  const material = new THREE.PointsMaterial({
+    color: 0xd4af37,
+    size: 0.05,
+    transparent: true,
+    opacity: 0.6,
+    blending: THREE.AdditiveBlending
+  });
+
+  const particles = new THREE.Points(geometry, material);
+  scene.add(particles);
+
+  // Núcleo (Orbe)
+  const coreGeo = new THREE.IcosahedronGeometry(1, 3);
+  const coreMat = new THREE.MeshBasicMaterial({ 
+    color: 0xd4af37, 
+    wireframe: true, 
+    transparent: true, 
+    opacity: 0.3 
+  });
+  const core = new THREE.Mesh(coreGeo, coreMat);
+  scene.add(core);
+
+  // Animação da Orbe
+  let progressSpeed = 0.01;
+  let currentProgress = 0;
+  let targetProgress = 0;
+
+  function animateOrb() {
+    requestAnimationFrame(animateOrb);
+    
+    // Rotação contínua
+    particles.rotation.x -= 0.002;
+    particles.rotation.y += 0.003;
+    core.rotation.x += 0.005;
+    core.rotation.y -= 0.005;
+
+    // Pulsação baseada no progresso
+    currentProgress += (targetProgress - currentProgress) * 0.05;
+    const pulse = 1 + Math.sin(Date.now() * 0.005) * 0.05 + (currentProgress * 0.5);
+    core.scale.set(pulse, pulse, pulse);
+
+    // Atualiza a barra de UI
+    const p = Math.min(100, Math.floor(currentProgress * 100));
+    if (barFill) barFill.style.width = `${p}%`;
+    if (percentText) percentText.textContent = `${p}%`;
+
+    renderer.render(scene, camera);
+  }
+  animateOrb();
+
+  return {
+    setProgress: (val) => { targetProgress = Math.max(0, Math.min(1, val)); },
+    finish: () => {
+      targetProgress = 1;
+      setTimeout(() => {
+        if (screen) screen.classList.add('hidden');
+        setTimeout(() => { if(screen) screen.remove(); }, 800);
+      }, 500);
+    }
+  };
+}
 
 // ==========================================
 // HELPERS E ENVIO DE DADOS
@@ -132,13 +226,6 @@ function applyTshirtTexture(root, textures, configs, corBase) {
   });
 }
 
-// ==========================================
-// CORES DO MANEQUIM (cada parte é independente)
-// ==========================================
-// No camisa.glb o "body" é UMA malha com 4 materiais (face, body2, arm, leg),
-// os olhos/cílios/dentes são malhas separadas e a calça são malhas "HP1-*",
-// "Pattern2D_*" e "MatShape_*" (material Denim). Por isso a identificação
-// é feita pelo NOME DO MATERIAL e pelo nome da malha.
 const COR_PADRAO = {
   corpo: '#e0e0e0', cabelo: '#333333', calca: '#1a1a1a', sapato: '#ffffff', olhos: '#ffffff'
 };
@@ -148,10 +235,9 @@ function isShirtMesh(nome) {
          nome.includes('sleeves') || nome.includes('ribbing') || nome.includes('gola');
 }
 
-// Retorna a "parte" do manequim a que um material/malha pertence
 function classifyPart(meshName, matName) {
-  if (isShirtMesh(meshName)) return 'camiseta';            // controlada por applyTshirtTexture
-  if (meshName.includes('stitch')) return 'costura';        // mantém a cor original da costura
+  if (isShirtMesh(meshName)) return 'camiseta';
+  if (meshName.includes('stitch')) return 'costura';
   if (matName.includes('eyelash') || meshName.includes('eyelash')) return 'cilios';
   if (matName === 'eye' || meshName.startsWith('eye')) return 'olhos';
   if (matName.includes('tooth') || meshName.includes('tooth')) return 'dentes';
@@ -161,13 +247,11 @@ function classifyPart(meshName, matName) {
       meshName.startsWith('hp1') || meshName.startsWith('pattern2d') || meshName.startsWith('matshape') ||
       meshName.includes('jeans') || meshName.includes('pants') || meshName.includes('calca')) return 'calca';
   if (['face', 'body2', 'arm', 'leg'].includes(matName) || meshName.startsWith('body')) return 'corpo';
-  return null; // desconhecido: não mexe
+  return null;
 }
 
 function applyMannequinColors(root, colors) {
   const c = Object.assign({}, COR_PADRAO, colors);
-
-  // cor e acabamento de cada parte
   const parts = {
     corpo:  { cor: c.corpo,  rough: 0.7,  metal: 0.1 },
     cabelo: { cor: c.cabelo, rough: 0.7,  metal: 0.1 },
@@ -189,11 +273,10 @@ function applyMannequinColors(root, colors) {
       const matName = (mat.name || '').toLowerCase();
       const parte = classifyPart(meshName, matName);
       const cfg = parte && parts[parte];
-      if (!cfg) return; // camiseta, costura ou desconhecido
+      if (!cfg) return;
 
       if (mat.color) {
         mat.color.set(cfg.cor);
-        // só converte manualmente se o three.js não faz o gerenciamento de cor sozinho
         if (!colorMgmt) mat.color.convertSRGBToLinear();
       }
       mat.map = null;
@@ -265,8 +348,10 @@ async function buildMannequin(cam) {
 // ==========================================
 // INICIALIZAÇÃO DO SITE
 // ==========================================
-async function initApp() {
+async function initApp(loader) {
   const data = await apiGet('getAll');
+  loader.setProgress(0.3); // 30% - Dados da API carregados
+
   if (data.ok) {
     state.config = Object.fromEntries(data.config.map(c => [c.CHAVE, c.VALOR]));
     state.camisetas = data.camisetas;
@@ -289,6 +374,8 @@ async function initApp() {
       { id: 3, nome: 'Gold Edition', descricao: 'Edição limitada com detalhes em dourado.', cor_base: '#d4af37', cor_corpo: '#c0c0c0', cor_calca: '#000000' }
     ];
   }
+  
+  loader.setProgress(0.5); // 50% - Textos prontos
 
   const container = document.getElementById('webgl-container');
   const scene = new THREE.Scene();
@@ -324,6 +411,9 @@ async function initApp() {
     
     scene.add(wrapper);
     modelsData.push({ wrapper, spinner, index: i });
+    
+    // Atualiza a barra conforme os modelos carregam (50% a 90%)
+    loader.setProgress(0.5 + ((i + 1) / totalModels) * 0.4);
   }
 
   const camState = { y: 1.3, z: 3.8 };
@@ -403,7 +493,9 @@ async function initApp() {
     if (window.ScrollTrigger) ScrollTrigger.refresh();
   });
 
+  loader.setProgress(0.95); // 95% - Tudo pronto
   initAdminPanel();
+  loader.finish(); // Fecha a tela
 }
 
 // ==========================================
@@ -633,8 +725,6 @@ function initAdminPanel() {
             reader.onload = () => resolve(reader.result);
           });
 
-          // Mostra no preview 3D na hora (o base64 NÃO vai mais para o campo de texto,
-          // pois é grande demais para uma célula da planilha)
           loadTexture(base64, c.cor_base).then(t => {
             const args = { frente: [t, null, null, null], costas: [null, t, null, null], manga: [null, null, t, null], gola: [null, null, null, t] }[textureKey];
             state.adminViewer.setTextures(...args, state.adminViewer.getConfigs(), document.getElementById('corBase').value);
@@ -652,7 +742,6 @@ function initAdminPanel() {
           });
 
           if (r.ok) {
-            // guarda no campo o link do Drive (curto), não o base64
             document.getElementById(inputId).value = r.url;
             toast('Imagem salva no Drive!', false);
           } else {
@@ -700,8 +789,6 @@ function initAdminPanel() {
           cor_base: document.getElementById('corBase').value
         };
 
-        // Imagens em base64 (data:...) são grandes demais para a planilha (limite de 50 mil
-        // caracteres por célula). Elas já foram salvas no Drive pelo upload, então não reenvia.
         ['textura_principal', 'textura_costas', 'textura_manga', 'textura_gola'].forEach(k => {
           if (String(dados[k] || '').startsWith('data:')) delete dados[k];
         });
@@ -945,9 +1032,16 @@ function loadGSAP() {
   });
 }
 
-loadGSAP().then(() => {
-  initApp();
-}).catch(err => {
-  console.error('Erro ao carregar GSAP:', err);
-  initApp(); // Inicia o site mesmo sem animação
+// INICIA O LOADING SCREEN E DEPOIS O APP
+document.addEventListener('DOMContentLoaded', () => {
+  const loader = initLoadingScreen();
+  loader.setProgress(0.1); // 10% (Iniciando dependências)
+
+  loadGSAP().then(() => {
+    loader.setProgress(0.25); // 25% (GSAP Pronto)
+    initApp(loader);
+  }).catch(err => {
+    console.error('Erro ao carregar GSAP:', err);
+    initApp(loader); // Inicia o site mesmo sem animação
+  });
 });
