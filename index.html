@@ -18,6 +18,18 @@
 </head>
 <body>
 
+<!-- TELA DE CARREGAMENTO (ORBE NEURAL) -->
+<div id="loadingScreen">
+  <div id="orb-container"></div>
+  <div class="loading-text">
+    <span id="loadingPercent">0%</span>
+    <div class="loading-bar-bg">
+      <div class="loading-bar-fill" id="loadingBarFill"></div>
+    </div>
+    <p>Iniciando experiência 3D</p>
+  </div>
+</div>
+
 <div class="scroll-popup" id="scrollPopup">
   <span>Deslize para ver os modelos</span>
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -91,10 +103,8 @@
   </section>
 </div>
 
-<!-- BOTÃO DO CADEADO -->
 <button class="lock-btn" id="lockBtn" title="Painel Admin" aria-label="Painel Admin">🔒</button>
 
-<!-- MODAL DE LOGIN -->
 <div class="modal" id="loginModal">
   <div class="modal-card">
     <h3>Painel Administrativo</h3>
@@ -108,7 +118,6 @@
   </div>
 </div>
 
-<!-- PAINEL ADMINISTRATIVO -->
 <div class="admin-panel" id="adminPanel">
   <div class="admin-header">
     <h2>🎛️ Painel Administrativo</h2>
@@ -121,6 +130,5 @@
 </div>
 
 <script type="module" src="script.js"></script>
-<!-- NÃO CARREGUE MAIS O ADMIN.JS AQUI -->
 </body>
 </html>
