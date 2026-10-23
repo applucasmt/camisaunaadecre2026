@@ -9,7 +9,7 @@ window.__state = state;
 window.THREE = THREE;
 
 // ==========================================
-// HELPERS E ENVIO DE DADOS (SEM ERRO DE CORS)
+// HELPERS E ENVIO DE DADOS
 // ==========================================
 function toast(msg, isError = false) {
   let el = document.getElementById('toast') || document.createElement('div');
@@ -28,7 +28,6 @@ async function apiGet(action = 'getAll') {
 
 async function apiPost(payload) {
   try {
-    // SOLUÇÃO DEFINITIVA PARA O CORS DO GOOGLE APPS SCRIPT
     const formData = new URLSearchParams();
     formData.append('payload', JSON.stringify(payload));
     const r = await fetch(API_URL, {
@@ -38,7 +37,6 @@ async function apiPost(payload) {
     });
     return await r.json();
   } catch (e) { 
-    console.error("Erro POST:", e);
     return { ok: false }; 
   }
 }
@@ -79,7 +77,7 @@ async function loadTexture(url, fallbackColor) {
 window.__loadTexture = loadTexture;
 
 // ==========================================
-// MANIPULAÇÃO DO MODELO 3D E TEXTURAS
+// APLICAÇÃO DE TEXTURAS E CORES
 // ==========================================
 const WHITE_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 let gltfPromise = null;
@@ -134,19 +132,32 @@ function applyTshirtTexture(root, textures, configs, corBase) {
   });
 }
 
+// ==========================================
+// CORREÇÃO: SEPARAÇÃO RIGOROSA DE CORPO E CALÇA
+// ==========================================
 function applyMannequinColors(root, colors) {
   root.traverse(child => {
     if (!child.isMesh) return;
     const nome = child.name.toLowerCase();
+    
+    // Ignora a camiseta
     const isShirt = nome.includes('body_front') || nome.includes('body_back') || 
                     nome.includes('sleeves') || nome.includes('ribbing') || nome.includes('gola');
     if (isShirt) return;
 
     let colorHex = colors.corpo || '#e0e0e0';
-    if (nome.includes('hair') || nome.includes('cabelo')) colorHex = colors.cabelo || '#222222';
-    else if (nome.includes('jeans') || nome.includes('pants') || nome.includes('calca') || 
-             nome.includes('leg')) colorHex = colors.calca || '#1a1a1a';
-    else if (nome.includes('shoe') || nome.includes('tenis') || nome.includes('sapato')) colorHex = colors.sapato || '#ffffff';
+
+    // Identifica calça e sapato ANTES de checar o corpo
+    if (nome.includes('jeans') || nome.includes('pants') || nome.includes('calca') || 
+        nome.includes('thigh') || nome.includes('shin') || nome.includes('hip')) {
+      colorHex = colors.calca || '#1a1a1a';
+    } 
+    else if (nome.includes('shoe') || nome.includes('tenis') || nome.includes('sapato') || nome.includes('foot')) {
+      colorHex = colors.sapato || '#ffffff';
+    }
+    else if (nome.includes('hair') || nome.includes('cabelo') || nome.includes('head')) {
+      colorHex = colors.cabelo || '#333333';
+    }
 
     if (colorHex) {
       const mats = Array.isArray(child.material) ? child.material : [child.material];
@@ -219,7 +230,7 @@ async function buildMannequin(cam) {
 }
 
 // ==========================================
-// INICIALIZAÇÃO DO SITE E SCROLL
+// INICIALIZAÇÃO DO SITE
 // ==========================================
 async function initApp() {
   const data = await apiGet('getAll');
@@ -359,12 +370,11 @@ async function initApp() {
     if (window.ScrollTrigger) ScrollTrigger.refresh();
   });
 
-  // Inicializa o Painel Administrativo
   initAdminPanel();
 }
 
 // ==========================================
-// PAINEL ADMINISTRATIVO (CADEADO)
+// PAINEL ADMINISTRATIVO
 // ==========================================
 function initAdminPanel() {
   const lockBtn = document.getElementById('lockBtn');
@@ -588,13 +598,11 @@ function initAdminPanel() {
           });
           document.getElementById(inputId).value = base64; 
           
-          // Atualiza a Imagem no Preview
           loadTexture(base64, c.cor_base).then(t => {
             const args = { frente: [t, null, null, null], costas: [null, t, null, null], manga: [null, null, t, null], gola: [null, null, null, t] }[textureKey];
             state.adminViewer.setTextures(...args, state.adminViewer.getConfigs(), document.getElementById('corBase').value);
           });
 
-          // Salva no Google Drive via Apps Script
           const r = await apiPost({
             action: 'uploadImagem',
             senha: state.config.admin_senha || '20266',
@@ -892,5 +900,5 @@ loadGSAP().then(() => {
   initApp();
 }).catch(err => {
   console.error('Erro ao carregar GSAP:', err);
-  initApp(); // Inicia mesmo se o GSAP falhar
+  initApp(); // Inicia o site mesmo sem animação
 });
