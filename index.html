@@ -30,20 +30,21 @@
   </div>
 </div>
 
-<!-- CAMADA FLUTUANTE DAS ARTES -->
+<!-- CAMADA FLUTUANTE DAS ARTES (CENTRALIZADA VERTICALMENTE) -->
 <div id="arteLayer" style="position:fixed; inset:0; z-index:50; pointer-events:none; display:flex; align-items:center; justify-content:space-between; padding: 0 5vw;">
+  
   <!-- Arte Modelo 1 -->
-  <div id="arteContainer-1" style="display:none; flex-direction:column; gap:20px;">
-    <img id="arteFrenteSite-1" style="max-height:250px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
-    <img id="arteVersoSite-1" style="max-height:250px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
+  <div id="arteContainer-1" style="display:none; flex-direction:column; gap:20px; opacity: 0; transition: opacity 0.4s ease, transform 0.4s ease;">
+    <img id="arteFrenteSite-1" style="max-height:220px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
+    <img id="arteVersoSite-1" style="max-height:220px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
   </div>
   
   <div style="flex:1;"></div>
 
-  <!-- Arte Modelo 3 (Para o layout ficar equilibrado) -->
-  <div id="arteContainer-3" style="display:none; flex-direction:column; gap:20px; align-items:flex-end;">
-    <img id="arteFrenteSite-3" style="max-height:250px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
-    <img id="arteVersoSite-3" style="max-height:250px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
+  <!-- Arte Modelo 3 -->
+  <div id="arteContainer-3" style="display:none; flex-direction:column; gap:20px; align-items:flex-end; opacity: 0; transition: opacity 0.4s ease, transform 0.4s ease;">
+    <img id="arteFrenteSite-3" style="max-height:220px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
+    <img id="arteVersoSite-3" style="max-height:220px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
   </div>
 </div>
 
