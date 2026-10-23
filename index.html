@@ -30,11 +30,11 @@
   </div>
 </div>
 
-<!-- CAMADA FLUTUANTE DAS ARTES (CENTRALIZADA VERTICALMENTE) -->
+<!-- CAMADA FLUTUANTE DAS ARTES -->
 <div id="arteLayer" style="position:fixed; inset:0; z-index:50; pointer-events:none; display:flex; align-items:center; justify-content:space-between; padding: 0 5vw;">
   
   <!-- Arte Modelo 1 -->
-  <div id="arteContainer-1" style="display:none; flex-direction:column; gap:20px; opacity: 0; transition: opacity 0.4s ease, transform 0.4s ease;">
+  <div id="arteContainer-1" style="display:flex; flex-direction:column; gap:20px; opacity: 0;">
     <img id="arteFrenteSite-1" style="max-height:220px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
     <img id="arteVersoSite-1" style="max-height:220px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
   </div>
@@ -42,14 +42,14 @@
   <div style="flex:1;"></div>
 
   <!-- Arte Modelo 3 -->
-  <div id="arteContainer-3" style="display:none; flex-direction:column; gap:20px; align-items:flex-end; opacity: 0; transition: opacity 0.4s ease, transform 0.4s ease;">
+  <div id="arteContainer-3" style="display:flex; flex-direction:column; gap:20px; align-items:flex-end; opacity: 0;">
     <img id="arteFrenteSite-3" style="max-height:220px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
     <img id="arteVersoSite-3" style="max-height:220px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
   </div>
 </div>
 
 <!-- Arte Modelo 2 (Fica escondida pois sobrepõe a 1 no scroll, mas mantemos o ID para não quebrar o script) -->
-<div id="arteContainer-2" style="display:none;">
+<div id="arteContainer-2" style="display:flex; position:absolute; opacity:0; pointer-events:none;">
   <img id="arteFrenteSite-2"><img id="arteVersoSite-2">
 </div>
 
