@@ -36,8 +36,8 @@ async function apiPost(payload) {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' }
     });
     return await r.json();
-  } catch (e) { 
-    return { ok: false }; 
+  } catch (e) {
+    return { ok: false, error: 'Sem resposta do servidor (' + (e && e.message ? e.message : e) + ')' };
   }
 }
 window.__apiPost = apiPost;
@@ -632,13 +632,15 @@ function initAdminPanel() {
             reader.readAsDataURL(file);
             reader.onload = () => resolve(reader.result);
           });
-          document.getElementById(inputId).value = base64; 
-          
+
+          // Mostra no preview 3D na hora (o base64 NÃO vai mais para o campo de texto,
+          // pois é grande demais para uma célula da planilha)
           loadTexture(base64, c.cor_base).then(t => {
             const args = { frente: [t, null, null, null], costas: [null, t, null, null], manga: [null, null, t, null], gola: [null, null, null, t] }[textureKey];
             state.adminViewer.setTextures(...args, state.adminViewer.getConfigs(), document.getElementById('corBase').value);
           });
 
+          toast('Enviando imagem...', false);
           const r = await apiPost({
             action: 'uploadImagem',
             senha: state.config.admin_senha || '20266',
@@ -650,6 +652,8 @@ function initAdminPanel() {
           });
 
           if (r.ok) {
+            // guarda no campo o link do Drive (curto), não o base64
+            document.getElementById(inputId).value = r.url;
             toast('Imagem salva no Drive!', false);
           } else {
             toast('Erro ao salvar imagem: ' + (r.error || 'Desconhecido'), true);
@@ -678,7 +682,7 @@ function initAdminPanel() {
         const cfgCostas = state.adminViewer.getConfigs().costas;
         const cfgManga = state.adminViewer.getConfigs().manga;
         const cfgGola = state.adminViewer.getConfigs().gola;
-        
+
         const dados = {
           textura_principal: document.getElementById('urlFrente').value,
           textura_costas: document.getElementById('urlCostas').value,
@@ -695,12 +699,20 @@ function initAdminPanel() {
           cor_olho: document.getElementById('corOlhos').value,
           cor_base: document.getElementById('corBase').value
         };
+
+        // Imagens em base64 (data:...) são grandes demais para a planilha (limite de 50 mil
+        // caracteres por célula). Elas já foram salvas no Drive pelo upload, então não reenvia.
+        ['textura_principal', 'textura_costas', 'textura_manga', 'textura_gola'].forEach(k => {
+          if (String(dados[k] || '').startsWith('data:')) delete dados[k];
+        });
+
+        toast('Salvando...', false);
         const r = await apiPost({ action:'updateCamiseta', senha: state.config.admin_senha || '20266', id: c.id, dados });
         if (r.ok) {
           Object.assign(c, dados);
           toast('Modelo salvo com sucesso!', false);
         } else {
-          toast('Erro ao salvar.', true);
+          toast('Erro ao salvar: ' + (r.error || 'sem detalhes'), true);
         }
       };
     });
