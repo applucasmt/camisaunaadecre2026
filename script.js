@@ -354,8 +354,10 @@ async function initApp(loader) {
         const el = document.getElementById(`nome-${i+1}`); if(el) el.textContent = state.camisetas[i].nome; 
         const ed = document.getElementById(`desc-${i+1}`); if(ed) ed.textContent = state.camisetas[i].descricao; 
         
+        // CORREÇÃO: Busca a imagem correta que está no HTML
         const imgArteF = document.getElementById(`arteFrenteSite-${i+1}`);
         const imgArteV = document.getElementById(`arteVersoSite-${i+1}`);
+        
         if(imgArteF && state.camisetas[i].arte_frente) {
           imgArteF.src = state.camisetas[i].arte_frente;
           imgArteF.style.display = 'block';
