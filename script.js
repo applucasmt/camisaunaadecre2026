@@ -128,6 +128,7 @@ async function apiPost(payload) {
 }
 window.__apiPost = apiPost;
 
+// CORREÇÃO DEFINITIVA PARA O GOOGLE DRIVE EXIBIR A IMAGEM
 function fixDriveUrl(url) {
   if (!url) return url;
   if (url.includes('drive.google.com')) {
@@ -354,17 +355,16 @@ async function initApp(loader) {
         const el = document.getElementById(`nome-${i+1}`); if(el) el.textContent = state.camisetas[i].nome; 
         const ed = document.getElementById(`desc-${i+1}`); if(ed) ed.textContent = state.camisetas[i].descricao; 
         
-        // CORREÇÃO: Busca a imagem correta que está no HTML
+        const container = document.getElementById(`arteContainer-${i+1}`);
         const imgArteF = document.getElementById(`arteFrenteSite-${i+1}`);
         const imgArteV = document.getElementById(`arteVersoSite-${i+1}`);
         
-        if(imgArteF && state.camisetas[i].arte_frente) {
-          imgArteF.src = state.camisetas[i].arte_frente;
-          imgArteF.style.display = 'block';
-        }
-        if(imgArteV && state.camisetas[i].arte_verso) {
-          imgArteV.src = state.camisetas[i].arte_verso;
-          imgArteV.style.display = 'block';
+        if(container && imgArteF && imgArteV) {
+          if(state.camisetas[i].arte_frente || state.camisetas[i].arte_verso) {
+            container.style.display = 'flex';
+            if(state.camisetas[i].arte_frente) imgArteF.src = fixDriveUrl(state.camisetas[i].arte_frente);
+            if(state.camisetas[i].arte_verso) imgArteV.src = fixDriveUrl(state.camisetas[i].arte_verso);
+          }
         }
       }
     }
@@ -430,15 +430,16 @@ async function initApp(loader) {
   if (window.gsap && window.ScrollTrigger) {
     gsap.registerPlugin(ScrollTrigger);
 
+    // Animação de rolagem controla a câmera e a exibição das artes
     ScrollTrigger.create({ trigger: "#s2", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
       const p = self.progress;
       camState.z = THREE.MathUtils.lerp(3.8, 2.0, p); 
       camState.y = THREE.MathUtils.lerp(1.3, 1.4, p); 
       lookState.y = THREE.MathUtils.lerp(1.0, 1.3, p); 
-    }});
-
-    ScrollTrigger.create({ trigger: "#s3", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
-      modelsData[0].spinner.rotation.y = THREE.MathUtils.lerp(0, Math.PI, self.progress);
+      
+      // Exibe a arte 1
+      const a1 = document.getElementById('arteContainer-1');
+      if(a1) a1.style.opacity = p > 0.5 ? 1 : 0;
     }});
 
     ScrollTrigger.create({ trigger: "#s4", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
@@ -448,19 +449,11 @@ async function initApp(loader) {
       modelsData[0].spinner.rotation.y = THREE.MathUtils.lerp(Math.PI, 0, p);
     }});
 
-    ScrollTrigger.create({ trigger: "#s5", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
-      if(modelsData[1]) modelsData[1].spinner.rotation.y = THREE.MathUtils.lerp(0, Math.PI, self.progress);
-    }});
-
     ScrollTrigger.create({ trigger: "#s6", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
       const p = self.progress;
       if(modelsData[1]) modelsData[1].wrapper.position.x = THREE.MathUtils.lerp(0, spacing, p);
       if(modelsData[2]) modelsData[2].wrapper.position.x = THREE.MathUtils.lerp(-spacing, 0, p);
       if(modelsData[1]) modelsData[1].spinner.rotation.y = THREE.MathUtils.lerp(Math.PI, 0, p);
-    }});
-
-    ScrollTrigger.create({ trigger: "#s7", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
-      if(modelsData[2]) modelsData[2].spinner.rotation.y = THREE.MathUtils.lerp(0, Math.PI, self.progress);
     }});
 
     gsap.utils.toArray('.content-box').forEach(box => {
@@ -472,13 +465,25 @@ async function initApp(loader) {
     });
   }
 
-  const popup = document.getElementById('scrollPopup');
-  if (popup) {
-    window.addEventListener('scroll', () => {
-      if (window.scrollY > 50) popup.classList.add('hidden');
-      else popup.classList.remove('hidden');
-    });
-  }
+  // Controle de visibilidade da Arte Layer baseado no Scroll geral
+  window.addEventListener('scroll', () => {
+    const scrollY = window.scrollY;
+    const h = window.innerHeight;
+    
+    // Arte 1 (Secao 2 e 3)
+    const a1 = document.getElementById('arteContainer-1');
+    if(a1) {
+      if(scrollY > h * 0.8 && scrollY < h * 2.5) a1.style.opacity = 1;
+      else a1.style.opacity = 0;
+    }
+    
+    // Arte 3 (Secao 6 e 7)
+    const a3 = document.getElementById('arteContainer-3');
+    if(a3) {
+      if(scrollY > h * 4.8 && scrollY < h * 6.5) a3.style.opacity = 1;
+      else a3.style.opacity = 0;
+    }
+  });
 
   function animate() {
     requestAnimationFrame(animate);
@@ -499,7 +504,7 @@ async function initApp(loader) {
 }
 
 // ==========================================
-// PAINEL ADMINISTRATIVO
+// PAINEL ADMINISTRATIVO (MANTIDO COMO ESTAVA)
 // ==========================================
 function initAdminPanel() {
   const lockBtn = document.getElementById('lockBtn');
@@ -733,8 +738,8 @@ function initAdminPanel() {
         const imgF = document.getElementById('displayArteFrente');
         const imgV = document.getElementById('displayArteVerso');
         
-        if (urlF) { imgF.src = urlF; imgF.style.display = 'block'; } else { imgF.style.display = 'none'; }
-        if (urlV) { imgV.src = urlV; imgV.style.display = 'block'; } else { imgV.style.display = 'none'; }
+        if (urlF) { imgF.src = fixDriveUrl(urlF); imgF.style.display = 'block'; } else { imgF.style.display = 'none'; }
+        if (urlV) { imgV.src = fixDriveUrl(urlV); imgV.style.display = 'block'; } else { imgV.style.display = 'none'; }
       };
 
       updateArteVisual();
