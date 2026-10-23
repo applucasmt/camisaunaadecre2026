@@ -9,7 +9,7 @@ window.__state = state;
 window.THREE = THREE;
 
 // ==========================================
-// TELA DE CARREGAMENTO (ORBE NEURAL 3D)
+// TELA DE CARREGAMENTO
 // ==========================================
 function initLoadingScreen() {
   const container = document.getElementById('orb-container');
@@ -38,24 +38,12 @@ function initLoadingScreen() {
   }
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
-  const material = new THREE.PointsMaterial({
-    color: 0xd4af37,
-    size: 0.05,
-    transparent: true,
-    opacity: 0.6,
-    blending: THREE.AdditiveBlending
-  });
-
+  const material = new THREE.PointsMaterial({ color: 0xd4af37, size: 0.05, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending });
   const particles = new THREE.Points(geometry, material);
   scene.add(particles);
 
   const coreGeo = new THREE.IcosahedronGeometry(1, 3);
-  const coreMat = new THREE.MeshBasicMaterial({ 
-    color: 0xd4af37, 
-    wireframe: true, 
-    transparent: true, 
-    opacity: 0.3 
-  });
+  const coreMat = new THREE.MeshBasicMaterial({ color: 0xd4af37, wireframe: true, transparent: true, opacity: 0.3 });
   const core = new THREE.Mesh(coreGeo, coreMat);
   scene.add(core);
 
@@ -64,7 +52,6 @@ function initLoadingScreen() {
 
   function animateOrb() {
     requestAnimationFrame(animateOrb);
-    
     particles.rotation.x -= 0.002;
     particles.rotation.y += 0.003;
     core.rotation.x += 0.005;
@@ -95,7 +82,7 @@ function initLoadingScreen() {
 }
 
 // ==========================================
-// HELPERS E ENVIO DE DADOS
+// HELPERS
 // ==========================================
 function toast(msg, isError = false) {
   let el = document.getElementById('toast') || document.createElement('div');
@@ -122,13 +109,10 @@ async function apiPost(payload) {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' }
     });
     return await r.json();
-  } catch (e) {
-    return { ok: false, error: 'Sem resposta do servidor (' + (e && e.message ? e.message : e) + ')' };
-  }
+  } catch (e) { return { ok: false, error: 'Erro de conexão' }; }
 }
 window.__apiPost = apiPost;
 
-// CORREÇÃO DEFINITIVA PARA O GOOGLE DRIVE EXIBIR A IMAGEM
 function fixDriveUrl(url) {
   if (!url) return url;
   if (url.includes('drive.google.com')) {
@@ -164,7 +148,7 @@ async function loadTexture(url, fallbackColor) {
 window.__loadTexture = loadTexture;
 
 // ==========================================
-// APLICAÇÃO DE TEXTURAS E CORES
+// MODELO 3D E APLICAÇÃO DE TEXTURA
 // ==========================================
 const WHITE_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 let gltfPromise = null;
@@ -339,7 +323,7 @@ async function buildMannequin(cam) {
 }
 
 // ==========================================
-// INICIALIZAÇÃO DO SITE
+// INICIALIZAÇÃO E SCROLLTELLING
 // ==========================================
 async function initApp(loader) {
   const data = await apiGet('getAll');
@@ -349,7 +333,7 @@ async function initApp(loader) {
     state.config = Object.fromEntries(data.config.map(c => [c.CHAVE, c.VALOR]));
     state.camisetas = data.camisetas;
     
-    // Lógica para atualizar textos e exibir artes no site
+    // Injeta as artes no HTML
     for (let i = 0; i < 3; i++) {
       if(state.camisetas[i]) { 
         const el = document.getElementById(`nome-${i+1}`); if(el) el.textContent = state.camisetas[i].nome; 
@@ -361,6 +345,7 @@ async function initApp(loader) {
         
         if(container && imgArteF && imgArteV) {
           if(state.camisetas[i].arte_frente || state.camisetas[i].arte_verso) {
+            // Não força o display:flex aqui, deixa o GSAP controlar a opacidade
             container.style.display = 'flex';
             if(state.camisetas[i].arte_frente) imgArteF.src = fixDriveUrl(state.camisetas[i].arte_frente);
             if(state.camisetas[i].arte_verso) imgArteV.src = fixDriveUrl(state.camisetas[i].arte_verso);
@@ -430,32 +415,64 @@ async function initApp(loader) {
   if (window.gsap && window.ScrollTrigger) {
     gsap.registerPlugin(ScrollTrigger);
 
-    // Animação de rolagem controla a câmera e a exibição das artes
+    // 1. Movimento da câmera (Foco)
     ScrollTrigger.create({ trigger: "#s2", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
       const p = self.progress;
       camState.z = THREE.MathUtils.lerp(3.8, 2.0, p); 
       camState.y = THREE.MathUtils.lerp(1.3, 1.4, p); 
       lookState.y = THREE.MathUtils.lerp(1.0, 1.3, p); 
-      
-      // Exibe a arte 1
-      const a1 = document.getElementById('arteContainer-1');
-      if(a1) a1.style.opacity = p > 0.5 ? 1 : 0;
     }});
 
+    // 2. Rotação do Modelo 1 e animação das Artes
+    ScrollTrigger.create({ trigger: "#s3", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
+      modelsData[0].spinner.rotation.y = THREE.MathUtils.lerp(0, Math.PI, self.progress);
+      
+      // Animação Suave da Arte do Modelo 1
+      const artes1 = document.getElementById('arteContainer-1');
+      if(artes1) {
+        artes1.style.opacity = self.progress > 0.2 ? Math.min(1, (self.progress - 0.2) * 2) : 0;
+        artes1.style.transform = `translateY(-50%) translateX(${(1 - self.progress) * -50}px)`;
+      }
+    }});
+
+    // 3. Troca para o Modelo 2
     ScrollTrigger.create({ trigger: "#s4", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
       const p = self.progress;
       modelsData[0].wrapper.position.x = THREE.MathUtils.lerp(0, spacing, p);
       if(modelsData[1]) modelsData[1].wrapper.position.x = THREE.MathUtils.lerp(spacing, 0, p);
       modelsData[0].spinner.rotation.y = THREE.MathUtils.lerp(Math.PI, 0, p);
+      
+      // Some com a arte 1, aparece a arte 2
+      const artes1 = document.getElementById('arteContainer-1');
+      const artes2 = document.getElementById('arteContainer-2');
+      if(artes1) artes1.style.opacity = 1 - p;
+      if(artes2) artes2.style.opacity = p;
     }});
 
+    // 4. Rotação do Modelo 2 e animação da Arte 2
+    ScrollTrigger.create({ trigger: "#s5", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
+      if(modelsData[1]) modelsData[1].spinner.rotation.y = THREE.MathUtils.lerp(0, Math.PI, self.progress);
+    }});
+
+    // 5. Troca para o Modelo 3
     ScrollTrigger.create({ trigger: "#s6", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
       const p = self.progress;
       if(modelsData[1]) modelsData[1].wrapper.position.x = THREE.MathUtils.lerp(0, spacing, p);
       if(modelsData[2]) modelsData[2].wrapper.position.x = THREE.MathUtils.lerp(-spacing, 0, p);
       if(modelsData[1]) modelsData[1].spinner.rotation.y = THREE.MathUtils.lerp(Math.PI, 0, p);
+      
+      const artes2 = document.getElementById('arteContainer-2');
+      const artes3 = document.getElementById('arteContainer-3');
+      if(artes2) artes2.style.opacity = 1 - p;
+      if(artes3) artes3.style.opacity = p;
     }});
 
+    // 6. Rotação do Modelo 3
+    ScrollTrigger.create({ trigger: "#s7", start: "top bottom", end: "top top", scrub: 1, onUpdate: self => {
+      if(modelsData[2]) modelsData[2].spinner.rotation.y = THREE.MathUtils.lerp(0, Math.PI, self.progress);
+    }});
+
+    // Fade in dos textos
     gsap.utils.toArray('.content-box').forEach(box => {
       ScrollTrigger.create({
         trigger: box, start: "top 80%",
@@ -465,25 +482,13 @@ async function initApp(loader) {
     });
   }
 
-  // Controle de visibilidade da Arte Layer baseado no Scroll geral
-  window.addEventListener('scroll', () => {
-    const scrollY = window.scrollY;
-    const h = window.innerHeight;
-    
-    // Arte 1 (Secao 2 e 3)
-    const a1 = document.getElementById('arteContainer-1');
-    if(a1) {
-      if(scrollY > h * 0.8 && scrollY < h * 2.5) a1.style.opacity = 1;
-      else a1.style.opacity = 0;
-    }
-    
-    // Arte 3 (Secao 6 e 7)
-    const a3 = document.getElementById('arteContainer-3');
-    if(a3) {
-      if(scrollY > h * 4.8 && scrollY < h * 6.5) a3.style.opacity = 1;
-      else a3.style.opacity = 0;
-    }
-  });
+  const popup = document.getElementById('scrollPopup');
+  if (popup) {
+    window.addEventListener('scroll', () => {
+      if (window.scrollY > 50) popup.classList.add('hidden');
+      else popup.classList.remove('hidden');
+    });
+  }
 
   function animate() {
     requestAnimationFrame(animate);
@@ -504,7 +509,7 @@ async function initApp(loader) {
 }
 
 // ==========================================
-// PAINEL ADMINISTRATIVO (MANTIDO COMO ESTAVA)
+// PAINEL ADMINISTRATIVO (MANTIDO)
 // ==========================================
 function initAdminPanel() {
   const lockBtn = document.getElementById('lockBtn');
